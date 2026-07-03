@@ -1,0 +1,33 @@
+# Keil MDK build output
+MCU_XiaoBai/MDK-ARM/Output/
+MCU_XiaoBai/MDK-ARM/DebugConfig/
+MCU_XiaoBai/MDK-ARM/RTE/
+MCU_XiaoBai/MDK-ARM/Listings/
+MCU_XiaoBai/MDK-ARM/Objects/
+MCU_XiaoBai/MDK-ARM/*.bak
+MCU_XiaoBai/MDK-ARM/*.dep
+MCU_XiaoBai/MDK-ARM/*.uvguix.*
+MCU_XiaoBai/MDK-ARM/JLinkLog.txt
+MCU_XiaoBai/MDK-ARM/JLinkSettings.ini
+MCU_XiaoBai/MDK-ARM/EventRecorderStub.scvd
+
+# SDK 里本项目用不上的部分（原件可在 resource/ebf_py32f030_20250102 中找到）
+MCU_XiaoBai/CMSIS/DSP_Lib/
+MCU_XiaoBai/CMSIS/RTOS/
+
+# Compiled artefacts
+*.o
+*.axf
+*.hex
+*.bin
+*.map
+*.htm
+*.lnp
+*.lst
+*.crf
+*.d
+*.iex
+*.__i
+
+# VSCode
+.vscode/
