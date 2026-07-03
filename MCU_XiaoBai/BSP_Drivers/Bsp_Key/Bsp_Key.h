@@ -11,13 +11,12 @@ typedef enum {
 } Bsp_Key_Id_t;
 
 typedef enum {
-    KEY_EVT_NONE   = 0,
-    KEY_EVT_SHORT  = 1,   /* 松开时判定的短按 */
-    KEY_EVT_LONG   = 2,   /* 按住超过 2000ms 触发一次 */
-    KEY_EVT_DOUBLE = 3,   /* 两次短按间隔 < 300ms */
+    KEY_EVT_NONE  = 0,
+    KEY_EVT_SHORT = 1,   /* 松开时立即上报（无 double-click 等待） */
+    KEY_EVT_LONG  = 2,   /* 按住超过 2000ms 触发一次 */
 } Bsp_Key_Evt_t;
 
-/** 初始化 4 个 KEY GPIO 输入（外部已上拉） */
+/** 初始化 4 个 KEY GPIO 输入（外部已上拉），采样实际电平做初值以吞掉开机时 KEY1 仍按着的假边沿 */
 void Bsp_Key_Init(void);
 
 /**

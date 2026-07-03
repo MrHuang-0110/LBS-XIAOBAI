@@ -1070,6 +1070,10 @@ git commit -m "feat(bsp): breathing LEDs on TIM1 CH1/CH2 + startup anim"
 
 ### Task 7: Bsp_Key - 4 键扫描 + 短/长/双击事件（KEY1 为主，其余 GPIO 预留）
 
+> **实施后变更（2026-07-03）：**
+> 1. 双击事件（`KEY_EVT_DOUBLE`）实施时被取消 —— 用户反馈"不需要且短按会因等 double-timeout 卡 300ms"。最终实现只有 `KEY_EVT_SHORT` / `KEY_EVT_LONG`，短按立即上报。
+> 2. `Bsp_Key_Init` 用实际 GPIO 电平做 `stable` 初值，并把 `long_reported` 初值也设为当前电平：这样 Bsp_Power 长按 2s 锁存后（KEY1 可能还按着）不会产生假短按/假长按事件。以最终代码为准。
+
 **Files:**
 
 - Create: `MCU_XiaoBai/BSP_Drivers/Bsp_Key/Bsp_Key.h`

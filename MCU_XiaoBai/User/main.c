@@ -67,7 +67,7 @@ int main(void)
             Bsp_Tick_DelayMs(500);
             Show_Mode(mode);
         }
-        /* 忽略 KEY_EVT_DOUBLE；忽略 KEY2/3/4 事件 */
+        /* 忽略 KEY2/3/4 事件（保留以后接入） */
 
         Bsp_Tick_DelayMs(10);
     }
