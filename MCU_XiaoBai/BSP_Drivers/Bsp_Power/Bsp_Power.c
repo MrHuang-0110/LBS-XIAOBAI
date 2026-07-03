@@ -64,6 +64,15 @@ uint8_t Bsp_Power_Init_WaitConfirm(void)
                 if (Bsp_Power_IsKey1Down()) rel_t = Bsp_Tick_GetMs();
                 else if (Bsp_Tick_GetMs() - rel_t >= 100) break;
             }
+            /* 开机成功指示：4 只 LED 快速滚动 3 圈 */
+            Bsp_Led_AllOff();
+            for (uint8_t round = 0; round < 3; round++) {
+                for (uint8_t i = 0; i < LED_MODE_COUNT; i++) {
+                    Bsp_Led_AllOff();
+                    Bsp_Led_On((Bsp_Led_Id_t)i);
+                    Bsp_Tick_DelayMs(80);
+                }
+            }
             Bsp_Led_AllOff();
             return 1;
         }

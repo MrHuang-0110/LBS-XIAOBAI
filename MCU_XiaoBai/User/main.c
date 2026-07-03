@@ -16,15 +16,38 @@ int main(void)
 
     Bsp_Motor_Init();
 
+    /* 非阻塞相位机 + LED3 1Hz 心跳（心跳只是临时诊断留底，等电机验证 OK 后可移除） */
+    uint32_t last_beat = Bsp_Tick_GetMs();
+    uint32_t phase_t   = Bsp_Tick_GetMs();
+    uint8_t  phase     = 0;   /* 0=正转 1=停A 2=反转 3=停B */
+
     while (1) {
-        Bsp_Motor_Set(MOTOR_LEFT,  +30); Bsp_Motor_Set(MOTOR_RIGHT, +30);
-        Bsp_Tick_DelayMs(2000);
-        Bsp_Motor_StopAll();
-        Bsp_Tick_DelayMs(500);
-        Bsp_Motor_Set(MOTOR_LEFT,  -30); Bsp_Motor_Set(MOTOR_RIGHT, -30);
-        Bsp_Tick_DelayMs(2000);
-        Bsp_Motor_StopAll();
-        Bsp_Tick_DelayMs(1500);
+        uint32_t now = Bsp_Tick_GetMs();
+
+        if (now - last_beat >= 500) {
+            last_beat = now;
+            Bsp_Led_Toggle(LED_MODE_REMOTE);   /* LED3 每 500ms 翻转 = 1Hz */
+        }
+
+        uint32_t dt = now - phase_t;
+        switch (phase) {
+        case 0:
+            Bsp_Motor_Set(MOTOR_LEFT,  +30); Bsp_Motor_Set(MOTOR_RIGHT, +30);
+            if (dt >= 2000) { phase = 1; phase_t = now; }
+            break;
+        case 1:
+            Bsp_Motor_StopAll();
+            if (dt >=  500) { phase = 2; phase_t = now; }
+            break;
+        case 2:
+            Bsp_Motor_Set(MOTOR_LEFT,  -30); Bsp_Motor_Set(MOTOR_RIGHT, -30);
+            if (dt >= 2000) { phase = 3; phase_t = now; }
+            break;
+        case 3:
+            Bsp_Motor_StopAll();
+            if (dt >= 1500) { phase = 0; phase_t = now; }
+            break;
+        }
     }
 }
 
