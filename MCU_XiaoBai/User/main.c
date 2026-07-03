@@ -20,15 +20,29 @@ int main(void)
 
     Bsp_UartAsr_Init();
 
-    /* 开机语请求：CMD=0x01 (播报预置语音), D0=0x01 (语音 ID = 开机语) */
-    Bsp_UartAsr_Send(0x01, 0x01, 0x00);
-    Bsp_Led_On(LED_MODE_VOICE);   /* 默认语音模式指示 */
+    /* 请求 ASRPRO 播开机语 (voice ID 0x01) */
+    Bsp_UartAsr_SendPlay(0x01);
+
+    /* 默认语音模式：LED4 常亮 */
+    Bsp_Led_On(LED_MODE_VOICE);
 
     while (1) {
-        Bsp_UartAsr_Frame_t f;
-        if (Bsp_UartAsr_TryRecv(&f)) {
-            Bsp_Led_Toggle(LED_MODE_REMOTE);         /* 收到每一帧翻转 LED3 */
-            Bsp_UartAsr_Send(f.cmd, f.d0, f.d1);     /* 完整回显 */
+        Bsp_UartAsr_Event_t e;
+        if (Bsp_UartAsr_TryRecv(&e)) {
+            switch (e.type) {
+            case ASR_EVT_CMD:
+                /* 收到语音命令，翻转 LED3（暂时用来验证 RX 通路） */
+                Bsp_Led_Toggle(LED_MODE_REMOTE);
+                break;
+            case ASR_EVT_WAKE:
+                /* 唤醒 -- 回一句 "收到" (voice ID 0x0A) */
+                Bsp_UartAsr_SendPlay(0x0A);
+                break;
+            case ASR_EVT_DONE:
+                /* 播报完成，暂不处理 */
+                break;
+            default: break;
+            }
         }
         Bsp_Tick_DelayMs(5);
     }
