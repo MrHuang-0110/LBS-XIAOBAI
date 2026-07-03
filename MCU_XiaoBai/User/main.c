@@ -1,6 +1,7 @@
 #include "main.h"
 #include "Bsp_Tick/Bsp_Tick.h"
 #include "Bsp_Led/Bsp_Led.h"
+#include "Bsp_Power/Bsp_Power.h"
 
 static void APP_SystemClockConfig(void);
 
@@ -11,12 +12,12 @@ int main(void)
     Bsp_Tick_Init();
     Bsp_Led_Init();
 
+    if (!Bsp_Power_Init_WaitConfirm()) while (1) { }
+
+    /* 锁存成功，LED4 慢闪表示存活 */
     while (1) {
-        for (int i = 0; i < LED_MODE_COUNT; i++) {
-            Bsp_Led_AllOff();
-            Bsp_Led_On((Bsp_Led_Id_t)i);
-            Bsp_Tick_DelayMs(200);
-        }
+        Bsp_Led_Toggle(LED_MODE_VOICE);
+        Bsp_Tick_DelayMs(500);
     }
 }
 

@@ -564,6 +564,11 @@
               <FileType>1</FileType>
               <FilePath>..\BSP_Drivers\Bsp_Led\Bsp_Led.c</FilePath>
             </File>
+            <File>
+              <FileName>Bsp_Power.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\BSP_Drivers\Bsp_Power\Bsp_Power.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
