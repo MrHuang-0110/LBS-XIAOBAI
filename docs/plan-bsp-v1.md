@@ -832,6 +832,11 @@ void Bsp_Motor_Init(void)
     HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
     HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
     HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
+
+    /* 关键：HAL_TIM_PWM_ConfigChannel 默认打开 OCxPE (CCR preload)，
+     * Start 不触发 UG，CCMR/CCER 更新停在 preload 不落地到工作寄存器 → PWM 永远不出。
+     * 手动生成一次 UG 让配置生效。 */
+    htim3.Instance->EGR = TIM_EGR_UG;
 }
 
 static void Motor_WritePair(uint32_t ch_a, uint32_t ch_b, int8_t speed)

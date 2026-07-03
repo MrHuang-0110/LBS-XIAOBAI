@@ -16,7 +16,6 @@ int main(void)
 
     Bsp_Motor_Init();
 
-    /* 非阻塞相位机 + LED3 1Hz 心跳 */
     uint32_t last_beat = Bsp_Tick_GetMs();
     uint32_t phase_t   = Bsp_Tick_GetMs();
     uint8_t  phase     = 0;
@@ -31,16 +30,18 @@ int main(void)
 
         uint32_t dt = now - phase_t;
         switch (phase) {
-        case 0:
-            Bsp_Motor_Set(MOTOR_LEFT,  +50); Bsp_Motor_Set(MOTOR_RIGHT, +50);
+        case 0:  /* 双电机正转 90% */
+            Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD);
+            Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD);
             if (dt >= 2000) { phase = 1; phase_t = now; }
             break;
         case 1:
             Bsp_Motor_StopAll();
             if (dt >=  500) { phase = 2; phase_t = now; }
             break;
-        case 2:
-            Bsp_Motor_Set(MOTOR_LEFT,  -50); Bsp_Motor_Set(MOTOR_RIGHT, -50);
+        case 2:  /* 双电机反转 90% */
+            Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD);
+            Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD);
             if (dt >= 2000) { phase = 3; phase_t = now; }
             break;
         case 3:

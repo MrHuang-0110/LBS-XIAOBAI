@@ -1,15 +1,23 @@
 #include "Bsp_Motor/Bsp_Motor.h"
 
 /*
- * TIM3 clock = 48MHz. Prescaler=0, Period=2399 -> 20 kHz.
- * PA6=CH1(AF1)  PA7=CH2(AF1)  PB0=CH3(AF1)  PB1=CH4(AF1)
- * AF 号来自 PY32F030 Datasheet V2.5 Section 3.1/3.2（Port A/B multiplexing）。
- * 注：SDK 里的 GPIO_AF13_TIM3 宏在 K28 (LQFP32/QFN32) 上不适用，四路都用 AF1。
+ * HAL 库版本，TIM3 4 通道 PWM，20 kHz，固定 90% duty，只支持正/反/停三种状态。
+ *
+ * 引脚（Datasheet V2.5 §3.1/§3.2）：
+ *   PA6=CH1 (AF1) L_A   PA7=CH2 (AF1) L_B
+ *   PB0=CH3 (AF1) R_A   PB1=CH4 (AF1) R_B
+ *
+ * 关键坑：HAL_TIM_PWM_ConfigChannel 默认打开 OCxPE (CCR preload)，之后 HAL_TIM_PWM_Start
+ *   只翻 CEN 位、不生成 UG。CCMR/CCER 里的位改动没落地到工作寄存器 → PWM 永远不出。
+ *   修复方案：Init 末尾主动补一次 EGR.UG=1，把配置从 preload 传到工作寄存器。
  */
-#define MOTOR_TIM_PERIOD  2399U
+
+#define MOTOR_TIM_PERIOD  2399U    /* 48MHz / (2400) = 20 kHz */
+#define MOTOR_DUTY_90     2160U    /* 2400 * 90% = 2160 */
 
 static TIM_HandleTypeDef htim3;
 
+/* HAL_TIM_PWM_Init 会调用此回调（SDK 例程 Bsp_Timer1_PWM.c 的标准做法）*/
 void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM3) {
@@ -18,16 +26,14 @@ void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef *htim)
         __HAL_RCC_GPIOB_CLK_ENABLE();
 
         GPIO_InitTypeDef gi = {0};
-        gi.Mode  = GPIO_MODE_AF_PP;
-        gi.Pull  = GPIO_NOPULL;
-        gi.Speed = GPIO_SPEED_FREQ_HIGH;
-        gi.Alternate = GPIO_AF1_TIM3;
+        gi.Mode      = GPIO_MODE_AF_PP;
+        gi.Pull      = GPIO_NOPULL;
+        gi.Speed     = GPIO_SPEED_FREQ_HIGH;
+        gi.Alternate = GPIO_AF1_TIM3;   /* 4 路 TIM3 都是 AF1（datasheet 亲测）*/
 
-        /* PA6/PA7 -> TIM3 CH1/CH2 */
         gi.Pin = GPIO_PIN_6 | GPIO_PIN_7;
         HAL_GPIO_Init(GPIOA, &gi);
 
-        /* PB0/PB1 -> TIM3 CH3/CH4 */
         gi.Pin = GPIO_PIN_0 | GPIO_PIN_1;
         HAL_GPIO_Init(GPIOB, &gi);
     }
@@ -35,13 +41,13 @@ void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef *htim)
 
 void Bsp_Motor_Init(void)
 {
-    htim3.Instance = TIM3;
+    htim3.Instance               = TIM3;
     htim3.Init.Prescaler         = 0;
     htim3.Init.CounterMode       = TIM_COUNTERMODE_UP;
     htim3.Init.Period            = MOTOR_TIM_PERIOD;
     htim3.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;
     htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-    HAL_TIM_PWM_Init(&htim3);        /* -> HAL_TIM_PWM_MspInit 配 GPIO/时钟 */
+    HAL_TIM_PWM_Init(&htim3);
 
     TIM_OC_InitTypeDef oc = {0};
     oc.OCMode     = TIM_OCMODE_PWM1;
@@ -58,37 +64,41 @@ void Bsp_Motor_Init(void)
     HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
     HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
     HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
+
+    /* 关键补丁：让 preload 中的 CCMR/CCER 值传到工作寄存器 */
+    __HAL_TIM_SET_COUNTER(&htim3, 0);
+    htim3.Instance->EGR = TIM_EGR_UG;
 }
 
-static void Motor_WritePair(uint32_t ch_a, uint32_t ch_b, int8_t speed)
+static void Motor_Drive(uint32_t ch_a, uint32_t ch_b, Bsp_Motor_Dir_t dir)
 {
-    uint32_t abs_s = (uint32_t)(speed >= 0 ? speed : -speed);
-    uint32_t duty  = abs_s * (MOTOR_TIM_PERIOD + 1) / 100U;
-    if (duty > MOTOR_TIM_PERIOD) duty = MOTOR_TIM_PERIOD;
-
-    if (speed > 0) {
-        __HAL_TIM_SET_COMPARE(&htim3, ch_a, duty);
+    switch (dir) {
+    case MOTOR_DIR_FORWARD:
+        __HAL_TIM_SET_COMPARE(&htim3, ch_a, MOTOR_DUTY_90);
         __HAL_TIM_SET_COMPARE(&htim3, ch_b, 0);
-    } else if (speed < 0) {
+        break;
+    case MOTOR_DIR_BACKWARD:
         __HAL_TIM_SET_COMPARE(&htim3, ch_a, 0);
-        __HAL_TIM_SET_COMPARE(&htim3, ch_b, duty);
-    } else {
+        __HAL_TIM_SET_COMPARE(&htim3, ch_b, MOTOR_DUTY_90);
+        break;
+    case MOTOR_DIR_STOP:
+    default:
         __HAL_TIM_SET_COMPARE(&htim3, ch_a, 0);
         __HAL_TIM_SET_COMPARE(&htim3, ch_b, 0);
+        break;
     }
 }
 
-void Bsp_Motor_Set(Bsp_Motor_Id_t id, int8_t speed)
+void Bsp_Motor_Set(Bsp_Motor_Id_t id, Bsp_Motor_Dir_t dir)
 {
-    if (speed >  100) speed =  100;
-    if (speed < -100) speed = -100;
-
-    if (id == MOTOR_LEFT) Motor_WritePair(TIM_CHANNEL_1, TIM_CHANNEL_2, speed);
-    else                  Motor_WritePair(TIM_CHANNEL_3, TIM_CHANNEL_4, speed);
+    if (id == MOTOR_LEFT)
+        Motor_Drive(TIM_CHANNEL_1, TIM_CHANNEL_2, dir);
+    else
+        Motor_Drive(TIM_CHANNEL_3, TIM_CHANNEL_4, dir);
 }
 
 void Bsp_Motor_StopAll(void)
 {
-    Bsp_Motor_Set(MOTOR_LEFT,  0);
-    Bsp_Motor_Set(MOTOR_RIGHT, 0);
+    Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_STOP);
+    Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_STOP);
 }
