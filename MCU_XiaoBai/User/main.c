@@ -3,6 +3,7 @@
 #include "Bsp_Led/Bsp_Led.h"
 #include "Bsp_Power/Bsp_Power.h"
 #include "Bsp_LedPwm/Bsp_LedPwm.h"
+#include "Bsp_Key/Bsp_Key.h"
 
 static void APP_SystemClockConfig(void);
 
@@ -13,12 +14,18 @@ int main(void)
     Bsp_Tick_Init();
     Bsp_Led_Init();
     if (!Bsp_Power_Init_WaitConfirm()) while (1) { }
-
     Bsp_LedPwm_Init();
     Bsp_LedPwm_PlayStartupBreath();
+    Bsp_Key_Init();
 
-    Bsp_Led_On(LED_MODE_VOICE);
-    while (1) { }
+    while (1) {
+        Bsp_Key_Id_t id;
+        Bsp_Key_Evt_t e = Bsp_Key_Poll(&id);
+        if (e == KEY_EVT_SHORT)  Bsp_Led_Toggle(LED_MODE_POWER);
+        if (e == KEY_EVT_DOUBLE) Bsp_Led_Toggle(LED_MODE_SENSOR);
+        if (e == KEY_EVT_LONG)   { Bsp_Led_On(LED_MODE_REMOTE); Bsp_Tick_DelayMs(500); Bsp_Led_Off(LED_MODE_REMOTE); }
+        Bsp_Tick_DelayMs(10);
+    }
 }
 
 static void APP_SystemClockConfig(void)
