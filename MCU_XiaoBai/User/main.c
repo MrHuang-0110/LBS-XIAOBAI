@@ -1,5 +1,6 @@
 #include "main.h"
 #include "Bsp_Tick/Bsp_Tick.h"
+#include "Bsp_Led/Bsp_Led.h"
 
 static void APP_SystemClockConfig(void);
 
@@ -8,9 +9,14 @@ int main(void)
     HAL_Init();
     APP_SystemClockConfig();
     Bsp_Tick_Init();
-    uint32_t t0 = Bsp_Tick_GetMs();
+    Bsp_Led_Init();
+
     while (1) {
-        if (Bsp_Tick_GetMs() - t0 >= 1000) t0 = Bsp_Tick_GetMs();
+        for (int i = 0; i < LED_MODE_COUNT; i++) {
+            Bsp_Led_AllOff();
+            Bsp_Led_On((Bsp_Led_Id_t)i);
+            Bsp_Tick_DelayMs(200);
+        }
     }
 }
 

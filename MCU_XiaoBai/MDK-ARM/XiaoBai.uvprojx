@@ -559,6 +559,11 @@
               <FileType>1</FileType>
               <FilePath>..\BSP_Drivers\Bsp_Tick\Bsp_Tick.c</FilePath>
             </File>
+            <File>
+              <FileName>Bsp_Led.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\BSP_Drivers\Bsp_Led\Bsp_Led.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
