@@ -574,6 +574,11 @@
               <FileType>1</FileType>
               <FilePath>..\BSP_Drivers\Bsp_Motor\Bsp_Motor.c</FilePath>
             </File>
+            <File>
+              <FileName>Bsp_LedPwm.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\BSP_Drivers\Bsp_LedPwm\Bsp_LedPwm.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
