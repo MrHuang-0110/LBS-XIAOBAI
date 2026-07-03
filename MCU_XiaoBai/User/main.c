@@ -1,4 +1,5 @@
 #include "main.h"
+#include "Bsp_Tick/Bsp_Tick.h"
 
 static void APP_SystemClockConfig(void);
 
@@ -6,7 +7,11 @@ int main(void)
 {
     HAL_Init();
     APP_SystemClockConfig();
-    while (1) { }
+    Bsp_Tick_Init();
+    uint32_t t0 = Bsp_Tick_GetMs();
+    while (1) {
+        if (Bsp_Tick_GetMs() - t0 >= 1000) t0 = Bsp_Tick_GetMs();
+    }
 }
 
 static void APP_SystemClockConfig(void)
