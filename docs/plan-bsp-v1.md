@@ -173,9 +173,7 @@ Bsp_Power_Init：
 Bsp_Power_WaitConfirm（阻塞最多 2000ms）：
   每 500ms 亮下一只 LED（LED1 → LED2 → LED3 → LED4）
   KEY1 松开 → 返回 0
-  满 2000ms → PA15 = 1，返回 1
-  ↓
-等 KEY1 释放 100ms 稳定
+  满 2000ms → PA15 = 1，立即返回 1（不等 KEY1 释放）
   ↓
 开机成功指示：4 只 LED 快速滚动 3 圈（每灯 80ms，共 ~1s）作为视觉反馈
   ↓

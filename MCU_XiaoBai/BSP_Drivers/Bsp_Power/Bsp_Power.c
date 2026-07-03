@@ -57,14 +57,9 @@ uint8_t Bsp_Power_Init_WaitConfirm(void)
         }
 
         if (elapsed >= WAIT_TOTAL_MS) {
+            /* 长按满 2s：立即锁存电源 */
             HAL_GPIO_WritePin(PWR_CTRL_PORT, PWR_CTRL_PIN, GPIO_PIN_SET);
-            /* 等 KEY1 稳定释放 100ms */
-            uint32_t rel_t = Bsp_Tick_GetMs();
-            while (1) {
-                if (Bsp_Power_IsKey1Down()) rel_t = Bsp_Tick_GetMs();
-                else if (Bsp_Tick_GetMs() - rel_t >= 100) break;
-            }
-            /* 开机成功指示：4 只 LED 快速滚动 3 圈 */
+            /* 开机成功指示：4 只 LED 快速滚动 3 圈（不等 KEY1 释放，用户可能还按着） */
             Bsp_Led_AllOff();
             for (uint8_t round = 0; round < 3; round++) {
                 for (uint8_t i = 0; i < LED_MODE_COUNT; i++) {
