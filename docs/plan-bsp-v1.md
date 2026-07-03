@@ -28,8 +28,8 @@
 | PA3   | 红外反射通道 3 (ADC_IN3) | 手势识别通道 B                                |
 | PA4   | TM1640 SCL               | 软件位翻转，输出                              |
 | PA5   | TM1640 SDA               | 软件位翻转，输出                              |
-| PA6   | 电机1 A (TIM3_CH1, AF13) | PWM 20 kHz                                    |
-| PA7   | 电机1 B (TIM3_CH2, AF13) | PWM 20 kHz                                    |
+| PA6   | 电机1 A (TIM3_CH1, AF1)  | PWM 20 kHz                                    |
+| PA7   | 电机1 B (TIM3_CH2, AF1)  | PWM 20 kHz                                    |
 | PA8   | 呼吸灯 1 (TIM1_CH1, AF2) | PWM 1 kHz，高电平亮                           |
 | PA9   | 呼吸灯 2 (TIM1_CH2, AF2) | PWM 1 kHz，高电平亮                           |
 | PA10  | 模式 LED2 (感应)         | GPIO 输出，低电平亮                           |
@@ -47,12 +47,12 @@
 | PB6   | USART1_TX → BLE ECB00    | AF0                                           |
 | PB7   | USART1_RX → BLE ECB00    | AF0                                           |
 | PB8   | KEY4                     | GPIO 输入，外部已上拉，按下 = 低              |
-| PF0   | USART2_RX ← ASRPRO       | AF (参考手册使用 AF1)                         |
-| PF1   | USART2_TX → ASRPRO       | AF (参考手册使用 AF1)                         |
+| PF0   | USART2_RX ← ASRPRO       | AF4（datasheet V2.5 §3.3）                    |
+| PF1   | USART2_TX → ASRPRO       | AF4（datasheet V2.5 §3.3）                    |
 | PF3   | BLE_STA                  | GPIO 输入（不用中断，主循环轮询）             |
 | PF4   | 红外发射控制             | GPIO 输出，上电常高                           |
 
-**注：** PA6/PA7 的 TIM3 AF 号（AF13）与 PB0/PB1 的 AF 号（AF1）不同，参见 PY32F030 参考手册 GPIO Alternate Function Mapping。任务里给出具体宏。
+**注：** PA6/PA7/PB0/PB1 上 TIM3 的 AF 号统一是 **AF1**（datasheet V2.5 §3.1 / §3.2 已核对）；PA8/PA9 上 TIM1 的 AF 是 **AF2**；PF0/PF1 上 USART2 的 AF 是 **AF4**；PB6/PB7 上 USART1 的 AF 是 **AF0**。任务里的宏名以 SDK `py32f0xx_hal_gpio_ex.h` 为准。
 
 ---
 
@@ -188,7 +188,7 @@ Bsp_Power_WaitConfirm（阻塞最多 2000ms）：
 
 - 每个 IO 都被显式配置：见后续 Task 3/4/5/6/8/10/12/14/16
 - 每个功能表条目对应 Task：0 骨架 / 1 Tick / 2 协议文档 / 3 LED / 4 电源 / 5 电机 / 6 呼吸灯 / 7 按键 / 8 UART ASR / 9 UART BLE + PF3 / 10 ADC / 11 IR + 电池 / 12 TM1640 / 13 汇总 BSP_Init / 14 关机
-- 关键 AF 宏 (`GPIO_AF13_TIM3`, `GPIO_AF1_TIM3`, `GPIO_AF2_TIM1`, `GPIO_AF1_USART2`, `GPIO_AF0_USART1`) 使用前需在 SDK `py32f0xx_hal_gpio_ex.h` 中确认存在
+- 关键 AF 宏 (`GPIO_AF1_TIM3`, `GPIO_AF2_TIM1`, `GPIO_AF4_USART2`, `GPIO_AF0_USART1`) 已在 datasheet V2.5 §3.1-§3.3 核对，SDK `py32f0xx_hal_gpio_ex.h` 中都存在
 
 ---
 
@@ -779,7 +779,7 @@ void Bsp_Motor_StopAll(void);
 
 /*
  * TIM3 clock = 48MHz. Prescaler=0, Period=2399 -> 20 kHz.
- * PA6=CH1(AF13)  PA7=CH2(AF13)  PB0=CH3(AF1)  PB1=CH4(AF1)
+ * PA6=CH1(AF1)  PA7=CH2(AF1)  PB0=CH3(AF1)  PB1=CH4(AF1)
  */
 #define MOTOR_TIM_PERIOD  2399U
 
@@ -796,7 +796,7 @@ static void Motor_GpioInit(void)
     gi.Speed = GPIO_SPEED_FREQ_HIGH;
 
     gi.Pin       = GPIO_PIN_6 | GPIO_PIN_7;
-    gi.Alternate = GPIO_AF13_TIM3;
+    gi.Alternate = GPIO_AF1_TIM3;
     HAL_GPIO_Init(GPIOA, &gi);
 
     gi.Pin       = GPIO_PIN_0 | GPIO_PIN_1;
@@ -1378,7 +1378,7 @@ static void UartAsr_GpioClkInit(void)
     gi.Mode      = GPIO_MODE_AF_PP;
     gi.Pull      = GPIO_PULLUP;
     gi.Speed     = GPIO_SPEED_FREQ_HIGH;
-    gi.Alternate = GPIO_AF1_USART2;
+    gi.Alternate = GPIO_AF4_USART2;
     gi.Pin       = GPIO_PIN_0 | GPIO_PIN_1;   /* PF0=RX2, PF1=TX2 */
     HAL_GPIO_Init(GPIOF, &gi);
 }
