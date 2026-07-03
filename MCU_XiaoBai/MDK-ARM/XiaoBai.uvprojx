@@ -569,6 +569,11 @@
               <FileType>1</FileType>
               <FilePath>..\BSP_Drivers\Bsp_Power\Bsp_Power.c</FilePath>
             </File>
+            <File>
+              <FileName>Bsp_Motor.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\BSP_Drivers\Bsp_Motor\Bsp_Motor.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

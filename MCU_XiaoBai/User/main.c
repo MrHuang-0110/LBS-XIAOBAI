@@ -2,6 +2,7 @@
 #include "Bsp_Tick/Bsp_Tick.h"
 #include "Bsp_Led/Bsp_Led.h"
 #include "Bsp_Power/Bsp_Power.h"
+#include "Bsp_Motor/Bsp_Motor.h"
 
 static void APP_SystemClockConfig(void);
 
@@ -11,13 +12,19 @@ int main(void)
     APP_SystemClockConfig();
     Bsp_Tick_Init();
     Bsp_Led_Init();
-
     if (!Bsp_Power_Init_WaitConfirm()) while (1) { }
 
-    /* 锁存成功，LED4 慢闪表示存活 */
+    Bsp_Motor_Init();
+
     while (1) {
-        Bsp_Led_Toggle(LED_MODE_VOICE);
+        Bsp_Motor_Set(MOTOR_LEFT,  +30); Bsp_Motor_Set(MOTOR_RIGHT, +30);
+        Bsp_Tick_DelayMs(2000);
+        Bsp_Motor_StopAll();
         Bsp_Tick_DelayMs(500);
+        Bsp_Motor_Set(MOTOR_LEFT,  -30); Bsp_Motor_Set(MOTOR_RIGHT, -30);
+        Bsp_Tick_DelayMs(2000);
+        Bsp_Motor_StopAll();
+        Bsp_Tick_DelayMs(1500);
     }
 }
 
