@@ -58,7 +58,7 @@ int main(void)
     uint8_t ble_was_connected = Bsp_UartBle_IsConnected();
 
     /* 遥控帧流缓冲：BLE 透传会分段到达，把每次 TryRecv 的字节追加进来，
-       在流里滑动找完整 16 字节帧，避免半帧被 TryRecv 切走。 */
+       在流里滑动找完整 17 字节帧，避免半帧被 TryRecv 切走。 */
     static uint8_t stream[REMOTE_FRAME_LEN * 4];
     uint16_t stream_len = 0;
 
@@ -93,7 +93,7 @@ int main(void)
 
         /* --- BLE 数据接收 + 流式遥控帧解析 ---
            BLE 透传会分段到达（一次 IDLE 可能只收到半帧），所以把每次
-           TryRecv 的字节追加到 stream 流缓冲，在流里滑动找完整 16 字节帧。 */
+           TryRecv 的字节追加到 stream 流缓冲，在流里滑动找完整 17 字节帧。 */
         {
             uint8_t buf[REMOTE_FRAME_LEN * 2];
             uint16_t n = Bsp_UartBle_TryRecv(buf, sizeof(buf));

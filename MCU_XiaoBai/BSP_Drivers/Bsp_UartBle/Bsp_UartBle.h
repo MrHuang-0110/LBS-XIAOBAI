@@ -29,7 +29,7 @@
  */
 #define REMOTE_FRAME_HEAD   0x5AU
 #define REMOTE_FRAME_TAIL   0xA5U
-#define REMOTE_FRAME_LEN    16U
+#define REMOTE_FRAME_LEN    17U   /* 5A 97 98 0A C1 + 10数据 + CRC + A5 = 17 */
 #define REMOTE_KEY_COUNT    10U
 
 /* 按键枚举（跟遥控协议.md 的 enum 顺序一致，对应字节位图 [0..9]） */
