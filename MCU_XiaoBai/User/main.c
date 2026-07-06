@@ -38,8 +38,8 @@ int main(void)
     /* 配置蓝牙名称（ECB00 默认从机透传，只需设名）。
        留 500ms 让 BLE 模块完成上电 */
     Bsp_Tick_DelayMs(500);
-    //Bsp_UartBle_ConfigName("LBS_XIAOBAI", 11);
-    Bsp_UartBle_ConfigName("Spark_AI", 8);
+    Bsp_UartBle_ConfigName("LBS_XIAOBAI", 11);
+    //Bsp_UartBle_ConfigName("Spark_AI", 8);
     /* PF3 连接状态边沿检测：断→通 触发 play=07，通→断 触发 play=08 */
     uint8_t ble_was_connected = Bsp_UartBle_IsConnected();
 
@@ -81,8 +81,13 @@ int main(void)
 
             /* 调试：BLE 回显 -- 把收到的原始字节原样从 BLE 串口发回。
                方便用 USB-TTL 接 PB6/PB7 手动发送验证收发链路。
+               ECB00 手册规定每次发送最多 20 字节，否则高速通讯会破坏
+               蓝牙收发，所以回显截断到 20 字节。
                验证完删除这行 Bsp_UartBle_Send。 */
-            Bsp_UartBle_Send(buf, n);
+            {
+                uint16_t echo_len = n > 20 ? 20 : n;
+                Bsp_UartBle_Send(buf, echo_len);
+            }
 
             /* 调试：把收到的原始字节以 "RX:" + hex + "\r\n" 形式从
                ASRPRO 串口(PF1 TX, 115200)发出去，便于用 USB-TTL 观察
@@ -98,7 +103,9 @@ int main(void)
                     dbg[k++] = ' ';
                 }
                 dbg[k++] = '\r'; dbg[k++] = '\n';
+                Bsp_Led_On(LED_MODE_REMOTE);   /* 标记：即将调 SendRaw */
                 Bsp_UartAsr_SendRaw(dbg, k);
+                Bsp_Led_Off(LED_MODE_REMOTE);  /* SendRaw 返回后灭 */
             }
 
             /* 遥控协议：5A 97 98 0A C1 [10字节键值] CRC A5，共 16 字节
