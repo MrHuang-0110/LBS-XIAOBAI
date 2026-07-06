@@ -72,13 +72,11 @@ int main(void)
         }
         ble_was_connected = ble_now;
 
-        /* --- BLE 数据接收 + 回显 + 遥控帧解析 --- */
+        /* --- BLE 数据接收 + 遥控帧解析 --- */
         uint8_t buf[REMOTE_FRAME_LEN * 2];
         uint16_t n = Bsp_UartBle_TryRecv(buf, sizeof(buf));
         if (n) {
-            /* 回显：把收到的原始字节原样发回，验证 BLE 收发双向链路。
-               收到数据也翻转 LED2 做视觉确认。 */
-            Bsp_UartBle_Send(buf, n);
+            /* 收到数据翻转 LED2 做视觉确认（不回发，避免干扰遥控器） */
             Bsp_Led_Toggle(LED_MODE_SENSOR);
 
             /* 遥控协议：5A 97 98 0A C1 [10字节键值] CRC A5，共 16 字节
