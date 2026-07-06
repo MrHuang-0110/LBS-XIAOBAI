@@ -54,6 +54,16 @@ int main(void)
     /* PF3 连接状态边沿检测：断→通 触发 play=07，通→断 触发 play=08 */
     uint8_t ble_was_connected = Bsp_UartBle_IsConnected();
 
+    /* 模式状态机：开机默认语音模式，短按 KEY1 循环切换
+       语音→动力→感应→遥控→语音（LED4→LED1→LED2→LED3→LED4） */
+    typedef enum { APP_MODE_VOICE=0, APP_MODE_POWER, APP_MODE_SENSOR, APP_MODE_REMOTE, APP_MODE_COUNT } App_Mode_t;
+    static const Bsp_Led_Id_t mode_led[APP_MODE_COUNT] = {
+        LED_MODE_VOICE, LED_MODE_POWER, LED_MODE_SENSOR, LED_MODE_REMOTE,
+    };
+    App_Mode_t mode = APP_MODE_VOICE;
+    Bsp_Led_AllOff();
+    Bsp_Led_On(mode_led[mode]);
+
     /* 遥控帧流缓冲：BLE 透传会分段到达，把每次 TryRecv 的字节追加进来，
        在流里滑动找完整 17 字节帧，避免半帧被 TryRecv 切走。 */
     static uint8_t stream[REMOTE_FRAME_LEN * 4];
@@ -63,6 +73,28 @@ int main(void)
     static uint32_t last_adc_print = 0;
 
     while (1) {
+        /* --- 按键扫描（KEY1：短按切模式 / 长按关机） --- */
+        {
+            Bsp_Key_Id_t kid;
+            Bsp_Key_Evt_t ke = Bsp_Key_Poll(&kid);
+            if (ke == KEY_EVT_SHORT && kid == KEY_ID_1) {
+                mode = (App_Mode_t)((mode + 1) % APP_MODE_COUNT);
+                Bsp_Led_AllOff();
+                Bsp_Led_On(mode_led[mode]);
+            }
+            else if (ke == KEY_EVT_LONG && kid == KEY_ID_1) {
+                /* === 关机流程 === */
+                Bsp_Motor_StopAll();                              /* 1. 停电机 */
+                Bsp_UartAsr_SendPlay(ASR_VOICE_SHUTDOWN);         /* 2. 请求播关机语 */
+                Bsp_Tick_DelayMs(1500);                           /* 3. 等语音播完 */
+                Bsp_Led_AllOff();                                 /* 4. 灭模式 LED */
+                Bsp_LedPwm_Set(LEDPWM_1, 0);                      /*    灭呼吸灯1 */
+                Bsp_LedPwm_Set(LEDPWM_2, 0);                      /*    灭呼吸灯2 */
+                Bsp_Tm1640_Clear();                               /*    清点阵 */
+                Bsp_Power_ShutDown();                             /* 5. PA15=0 断电，不返回 */
+            }
+        }
+
         /* --- ASRPRO 事件处理（Task 8 逻辑保留） --- */
         Bsp_UartAsr_Event_t e;
         if (Bsp_UartAsr_TryRecv(&e)) {
