@@ -57,6 +57,11 @@ int main(void)
     /* PF3 连接状态边沿检测：断→通 触发 play=07，通→断 触发 play=08 */
     uint8_t ble_was_connected = Bsp_UartBle_IsConnected();
 
+    /* 遥控帧流缓冲：BLE 透传会分段到达，把每次 TryRecv 的字节追加进来，
+       在流里滑动找完整 16 字节帧，避免半帧被 TryRecv 切走。 */
+    static uint8_t stream[REMOTE_FRAME_LEN * 4];
+    uint16_t stream_len = 0;
+
     while (1) {
         /* --- ASRPRO 事件处理（Task 8 逻辑保留） --- */
         Bsp_UartAsr_Event_t e;
@@ -86,40 +91,61 @@ int main(void)
         }
         ble_was_connected = ble_now;
 
-        /* --- BLE 数据接收 + 遥控帧解析 --- */
-        uint8_t buf[REMOTE_FRAME_LEN * 2];
-        uint16_t n = Bsp_UartBle_TryRecv(buf, sizeof(buf));
-        if (n) {
-            /* 遥控协议：5A 97 98 0A C1 [10字节键值] CRC A5，共 16 字节
-               在 buf 里滑动找帧头 0x5A，校验通过就处理 */
-            for (uint16_t i = 0; i + REMOTE_FRAME_LEN <= n; i++) {
-                if (buf[i] != REMOTE_FRAME_HEAD) continue;
-                if (buf[i + 1] != 0x97 || buf[i + 2] != 0x98) continue;
-                if (buf[i + 3] != 0x0A || buf[i + 4] != 0xC1) continue;
-                if (buf[i + REMOTE_FRAME_LEN - 1] != REMOTE_FRAME_TAIL) continue;
+        /* --- BLE 数据接收 + 流式遥控帧解析 ---
+           BLE 透传会分段到达（一次 IDLE 可能只收到半帧），所以把每次
+           TryRecv 的字节追加到 stream 流缓冲，在流里滑动找完整 16 字节帧。 */
+        {
+            uint8_t buf[REMOTE_FRAME_LEN * 2];
+            uint16_t n = Bsp_UartBle_TryRecv(buf, sizeof(buf));
+            for (uint16_t k = 0; k < n; k++) {
+                if (stream_len < sizeof(stream)) {
+                    stream[stream_len++] = buf[k];
+                }
+                /* 满了就不再追加（丢新数据，正常不会发生） */
+            }
+        }
+
+        /* 在流缓冲里滑动找完整帧；解析掉的就从流里移除 */
+        {
+            uint16_t i = 0;
+            while (i + REMOTE_FRAME_LEN <= stream_len) {
+                /* 找帧头：当前位置不是 0x5A 就跳过 */
+                if (stream[i] != REMOTE_FRAME_HEAD) { i++; continue; }
+                /* 校验固定字段 */
+                if (stream[i+1]!=0x97 || stream[i+2]!=0x98 ||
+                    stream[i+3]!=0x0A || stream[i+4]!=0xC1) { i++; continue; }
+                if (stream[i+REMOTE_FRAME_LEN-1] != REMOTE_FRAME_TAIL) { i++; continue; }
                 /* CRC：从帧头到数据位最后一位的累加和取低 8 位 */
                 uint8_t crc = 0;
-                for (uint16_t j = 0; j < REMOTE_FRAME_LEN - 2; j++) crc += buf[i + j];
-                if (crc != buf[i + REMOTE_FRAME_LEN - 2]) continue;
+                for (uint16_t j = 0; j < REMOTE_FRAME_LEN - 2; j++) crc += stream[i + j];
+                if (crc != stream[i + REMOTE_FRAME_LEN - 2]) { i++; continue; }
 
-                /* 帧有效，扫描 10 个键值位图，按按键分级闪 LED：
-                   方向键(上下左右) 闪 1 下；Y/A/X/B 闪 2 下；L1/R1 闪 3 下 */
-                uint8_t *keys = &buf[i + 5];
-                uint8_t  flashes = 0;
-                if (keys[REMOTE_KEY_UP]    || keys[REMOTE_KEY_DOWN] ||
-                    keys[REMOTE_KEY_LEFT]  || keys[REMOTE_KEY_RIGHT]) {
-                    flashes = 1;
+                /* 帧有效，扫描 10 个键值位图，按按键分级闪 LED */
+                {
+                    uint8_t *keys = &stream[i + 5];
+                    uint8_t  flashes = 0;
+                    if (keys[REMOTE_KEY_UP]    || keys[REMOTE_KEY_DOWN] ||
+                        keys[REMOTE_KEY_LEFT]  || keys[REMOTE_KEY_RIGHT]) {
+                        flashes = 1;
+                    }
+                    if (keys[REMOTE_KEY_Y] || keys[REMOTE_KEY_A] ||
+                        keys[REMOTE_KEY_X] || keys[REMOTE_KEY_B]) {
+                        flashes = 2;
+                    }
+                    if (keys[REMOTE_KEY_L1] || keys[REMOTE_KEY_R1]) {
+                        flashes = 3;
+                    }
+                    if (flashes) FlashLeds(flashes);
                 }
-                if (keys[REMOTE_KEY_Y] || keys[REMOTE_KEY_A] ||
-                    keys[REMOTE_KEY_X] || keys[REMOTE_KEY_B]) {
-                    flashes = 2;
-                }
-                if (keys[REMOTE_KEY_L1] || keys[REMOTE_KEY_R1]) {
-                    flashes = 3;
-                }
-                if (flashes) FlashLeds(flashes);
 
-                i += REMOTE_FRAME_LEN - 1;   /* 跳过已消费的帧 */
+                i += REMOTE_FRAME_LEN;   /* 跳过已消费的帧 */
+            }
+
+            /* 把 i 之前已扫描过/丢弃的字节从流缓冲移除，保留 [i, stream_len) */
+            if (i > 0) {
+                uint16_t remain = stream_len - i;
+                for (uint16_t k = 0; k < remain; k++) stream[k] = stream[i + k];
+                stream_len = remain;
             }
         }
 
