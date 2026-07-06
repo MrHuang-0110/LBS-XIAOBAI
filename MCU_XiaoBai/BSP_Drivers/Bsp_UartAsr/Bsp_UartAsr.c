@@ -2,30 +2,31 @@
 #include <string.h>
 
 /*
- * 语音协议 v0.4 实现：ASCII 文本，无帧尾，靠 UART IDLE 中断分帧。
- *   MCU 发：<tag>[=<dec>]         （无 \r\n）
- *   MCU 收：<tag>[:<dec>]         （无 \r\n）
+ * 语音协议 v0.5 实现：ASCII 文本
+ *   MCU 发（无帧尾）：<tag>[=<dec>]
+ *   MCU 收（帧尾 \r\n）：<tag>[=<dec>]\r\n
  *
  * 接收路径：DMA 循环 + UART IDLE 中断
- *   每次 IDLE 触发时，读 DMA 剩余字节数得知新收到 [last_pos, cur) 段，
- *   把该段作为一帧整体喂给 Line_Dispatch 解析。因为没有帧尾，
- *   IDLE 边界 = 帧边界。
+ *   - IDLE 中断里读 DMA 剩余字节数得到新收字节段
+ *   - 逐字节喂进字符状态机 Frame_FeedByte
+ *   - 收到 '\n' 时判定为一帧结束（若前一字节是 '\r' 顺便剔除），
+ *     把 g_line 里累积的字符交给 Line_Dispatch 解析
  *
- *   如果两帧之间发送方没有暂停就来回粘一起（比如 "cmd:30cmd:31"），
- *   Line_Dispatch 只会试图匹配整段前缀（"cmd:30cmd:31" 不是合法帧 → 丢弃）。
- *   协议约定发送方每帧之间有 ≥100µs 静默，正常不会粘。
+ * 发送路径：把 "tag[=NN]" 组装成字符串，HAL_UART_Transmit 阻塞发送（无帧尾）。
  */
 
 #define RX_DMA_BUF_SIZE   64U     /* DMA 循环缓冲 */
-#define LINE_BUF_SIZE     32U     /* 单帧最大长度（协议约定） */
+#define LINE_BUF_SIZE     32U     /* 单帧最大长度（协议约定，不含 \r\n） */
 #define EVT_Q_SIZE        4U
 
 static UART_HandleTypeDef huart;
 static DMA_HandleTypeDef  hdma_rx;
 static uint8_t g_rx_dma[RX_DMA_BUF_SIZE];
 
-/* 单帧缓冲（IDLE 中断里把 DMA 增量段拷进这里，长度不能超 LINE_BUF_SIZE） */
-static uint8_t g_line[LINE_BUF_SIZE];
+/* 字符状态机 */
+static uint8_t  g_line[LINE_BUF_SIZE];
+static uint16_t g_line_len = 0;
+static uint8_t  g_line_ovf = 0;   /* 当前行已溢出，等 \n 复位 */
 
 /* 事件环形队列 */
 static Bsp_UartAsr_Event_t g_evtq[EVT_Q_SIZE];
@@ -40,11 +41,11 @@ static void Evt_Push(Bsp_UartAsr_EvtType_t t, uint8_t arg)
     g_qw = next;
 }
 
-/* 从形如 "cmd:30" 里取 ":NN"（1-3 位十进制，值 0..255），成功返回 0 */
-static uint8_t Parse_ColonDec(const uint8_t *line, uint16_t len, uint16_t tag_len, uint8_t *out)
+/* 从形如 "cmd=30" 里取 "=NN"（1..3 位十进制，值 0..255），成功返回 0 */
+static uint8_t Parse_EqDec(const uint8_t *line, uint16_t len, uint16_t tag_len, uint8_t *out)
 {
     if (len < tag_len + 2) return 1;
-    if (line[tag_len] != ':') return 1;
+    if (line[tag_len] != '=') return 1;
 
     uint16_t val = 0;
     uint16_t digits = 0;
@@ -60,7 +61,7 @@ static uint8_t Parse_ColonDec(const uint8_t *line, uint16_t len, uint16_t tag_le
     return 0;
 }
 
-/* 一帧字符（无 \r\n）到齐后调这个函数做协议分派 */
+/* 一帧字符（已剥除 \r\n）到齐后调这个函数分派 */
 static void Line_Dispatch(const uint8_t *line, uint16_t len)
 {
     if (len == 0) return;
@@ -70,19 +71,52 @@ static void Line_Dispatch(const uint8_t *line, uint16_t len)
         Evt_Push(ASR_EVT_WAKE, 0);
         return;
     }
-    /* cmd:NN */
+    /* cmd=NN */
     if (len >= 3 && memcmp(line, "cmd", 3) == 0) {
         uint8_t v;
-        if (Parse_ColonDec(line, len, 3, &v) == 0) Evt_Push(ASR_EVT_CMD, v);
+        if (Parse_EqDec(line, len, 3, &v) == 0) Evt_Push(ASR_EVT_CMD, v);
         return;
     }
-    /* done:NN */
+    /* done=NN */
     if (len >= 4 && memcmp(line, "done", 4) == 0) {
         uint8_t v;
-        if (Parse_ColonDec(line, len, 4, &v) == 0) Evt_Push(ASR_EVT_DONE, v);
+        if (Parse_EqDec(line, len, 4, &v) == 0) Evt_Push(ASR_EVT_DONE, v);
         return;
     }
     /* 其它 tag 忽略 */
+}
+
+/* 字符状态机 */
+static void Frame_FeedByte(uint8_t c)
+{
+    if (c == '\n') {
+        if (!g_line_ovf) {
+            uint16_t n = g_line_len;
+            if (n > 0 && g_line[n - 1] == '\r') n--;    /* 剥掉 \r */
+            Line_Dispatch(g_line, n);
+        }
+        g_line_len = 0;
+        g_line_ovf = 0;
+        return;
+    }
+    if (g_line_ovf) return;
+    if (g_line_len >= LINE_BUF_SIZE) {
+        g_line_ovf = 1;
+        return;
+    }
+    g_line[g_line_len++] = c;
+}
+
+/* 从 DMA 环形缓冲 [last_pos, cur) 区段喂给状态机（跨界自动 wrap） */
+static void Frame_FeedRange(uint16_t last_pos, uint16_t cur)
+{
+    if (cur == last_pos) return;
+    if (cur > last_pos) {
+        for (uint16_t i = last_pos; i < cur; i++) Frame_FeedByte(g_rx_dma[i]);
+    } else {
+        for (uint16_t i = last_pos; i < RX_DMA_BUF_SIZE; i++) Frame_FeedByte(g_rx_dma[i]);
+        for (uint16_t i = 0; i < cur; i++) Frame_FeedByte(g_rx_dma[i]);
+    }
 }
 
 void Bsp_UartAsr_Init(void)
@@ -135,7 +169,7 @@ void Bsp_UartAsr_Init(void)
     __HAL_UART_ENABLE_IT(&huart, UART_IT_IDLE);
 }
 
-/* --- 发送 --- */
+/* --- 发送（无帧尾） --- */
 
 static void SendStr(const char *s, uint16_t len)
 {
@@ -144,7 +178,7 @@ static void SendStr(const char *s, uint16_t len)
 
 void Bsp_UartAsr_SendPlay(uint8_t voice_id)
 {
-    /* "play=NN"（协议约定 voice_id 都在 1..99 之间，统一 2 位十进制补零） */
+    /* "play=NN"（voice_id 都在 1..99 之间，2 位十进制补零） */
     if (voice_id > 99U) voice_id = 99U;
     char buf[7];
     buf[0] = 'p'; buf[1] = 'l'; buf[2] = 'a'; buf[3] = 'y'; buf[4] = '=';
@@ -166,7 +200,7 @@ uint8_t Bsp_UartAsr_TryRecv(Bsp_UartAsr_Event_t *out)
     return 1;
 }
 
-/* HAL 在 IDLE 触发时调这个弱回调：把 DMA 缓冲 [last_pos, cur) 段作为整帧派发 */
+/* HAL 在 IDLE 触发时调这个弱回调：把 DMA 增量段喂给字符状态机 */
 void HAL_UART_IdleFrameDetectCpltCallback(UART_HandleTypeDef *huart_p)
 {
     if (huart_p->Instance != USART2) return;
@@ -175,30 +209,10 @@ void HAL_UART_IdleFrameDetectCpltCallback(UART_HandleTypeDef *huart_p)
     uint16_t cur  = RX_DMA_BUF_SIZE - ndtr;
 
     static uint16_t last_pos = 0;
-    if (cur == last_pos) return;   /* 无新数据 */
-
-    /* 把 [last_pos, cur) 段拷贝到 g_line 里（跨环形边界要 wrap），再 dispatch */
-    uint16_t out_len = 0;
-    if (cur > last_pos) {
-        uint16_t n = (uint16_t)(cur - last_pos);
-        if (n > LINE_BUF_SIZE) n = LINE_BUF_SIZE;
-        memcpy(g_line, &g_rx_dma[last_pos], n);
-        out_len = n;
-    } else {
-        uint16_t n1 = (uint16_t)(RX_DMA_BUF_SIZE - last_pos);
-        uint16_t n2 = cur;
-        if (n1 + n2 > LINE_BUF_SIZE) {
-            /* 帧过长（协议规定 ≤32），丢弃这一段但推进 last_pos */
-            last_pos = cur;
-            return;
-        }
-        memcpy(g_line, &g_rx_dma[last_pos], n1);
-        memcpy(&g_line[n1], &g_rx_dma[0], n2);
-        out_len = (uint16_t)(n1 + n2);
+    if (cur != last_pos) {
+        Frame_FeedRange(last_pos, cur);
+        last_pos = cur;
     }
-
-    last_pos = cur;
-    Line_Dispatch(g_line, out_len);
 }
 
 /* 中断入口 */
