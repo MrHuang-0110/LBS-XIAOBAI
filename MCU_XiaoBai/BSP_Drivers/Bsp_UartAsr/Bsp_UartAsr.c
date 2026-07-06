@@ -218,18 +218,11 @@ void HAL_UART_IdleFrameDetectCpltCallback(UART_HandleTypeDef *huart_p)
 
     static uint16_t last_pos = 0;
     if (cur != last_pos) {
-        /* 临时诊断：收到 USART2 数据时翻转 LED2（感应），验证 RX 链路 */
-        HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_10);
         Frame_FeedRange(last_pos, cur);
         last_pos = cur;
     }
 }
 
 /* 中断入口 */
-void Bsp_UartAsr_UART_IRQHandler(void)
-{
-    /* 临时诊断：USART2 中断触发就翻转 LED1(PB2)，区分中断有没有进 */
-    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_2);
-    HAL_UART_IRQHandler(&huart);
-}
+void Bsp_UartAsr_UART_IRQHandler(void) { HAL_UART_IRQHandler(&huart); }
 void Bsp_UartAsr_DMA_IRQHandler (void) { HAL_DMA_IRQHandler(&hdma_rx); }

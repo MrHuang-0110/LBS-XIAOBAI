@@ -20,9 +20,15 @@ typedef enum {
     POWER_ACT_COUNT
 } Power_Action_t;
 
-/* 模式 -> 对应模式 LED（文档 §6：LED1=动力/LED2=感应/LED3=遥控/LED4=语音）*/
+/* 模式 -> 对应 LED（KEY-LED 一一对应，2026-07-06 变更）：
+     语音->LED1 / 感应->LED2 / 遥控->LED3 / 动力->LED4
+   注：Bsp_Led 枚举名 LED_MODE_POWER 实际是 LED1(PB2)，LED_MODE_VOICE 是 LED4(PA12)，
+   名称跟模式不对应，但 mode_led[] 按物理 LED 映射，逻辑正确。 */
 static const Bsp_Led_Id_t mode_led[APP_MODE_COUNT] = {
-    LED_MODE_VOICE, LED_MODE_POWER, LED_MODE_SENSOR, LED_MODE_REMOTE,
+    LED_MODE_POWER,   /* APP_MODE_VOICE  -> LED1 */
+    LED_MODE_VOICE,   /* APP_MODE_POWER  -> LED4 */
+    LED_MODE_SENSOR,  /* APP_MODE_SENSOR -> LED2 */
+    LED_MODE_REMOTE,  /* APP_MODE_REMOTE -> LED3 */
 };
 /* 模式 -> 进入时播报的语音 ID */
 static const uint8_t mode_voice[APP_MODE_COUNT] = {
@@ -93,7 +99,7 @@ int main(void)
 
     /* 应用层时序：等 ASRPRO 启动 + 默认进入语音模式 */
     Bsp_Tick_DelayMs(1500);
-    SwitchMode(APP_MODE_VOICE);   /* 点 LED4 + 播"进入语音模式"（兼作开机语） */
+    SwitchMode(APP_MODE_VOICE);   /* 点 LED1 + 播"进入语音模式"（兼作开机语） */
 
     /* BLE 配名（BLE 上电后留 500ms） */
     Bsp_Tick_DelayMs(500);
@@ -106,18 +112,28 @@ int main(void)
     static uint8_t stream[REMOTE_FRAME_LEN * 4];
     uint16_t stream_len = 0;
 
+    /* 语音动作命令防抖时间戳：800ms 内只执行第一个动作命令，
+       防 ASRPRO 误识别连续发 cmd 导致电机正反转交替抖动 */
+    uint32_t last_cmd_time = 0;
+
     while (1) {
-        /* --- 按键扫描 --- */
+        /* --- 按键扫描（4 键各管一个模式，KEY1 长按关机） --- */
         {
             Bsp_Key_Id_t kid;
             Bsp_Key_Evt_t ke = Bsp_Key_Poll(&kid);
-            if (ke == KEY_EVT_SHORT && kid == KEY_ID_1) {
-                if (g_mode == APP_MODE_POWER) {
-                    /* 动力模式：短按循环切动作 停→进→退→左→右→停 */
-                    Power_Execute((Power_Action_t)((g_power_action + 1) % POWER_ACT_COUNT));
-                } else {
-                    /* 其它模式：短按切模式 */
-                    SwitchMode((App_Mode_t)((g_mode + 1) % APP_MODE_COUNT));
+            if (ke == KEY_EVT_SHORT) {
+                switch (kid) {
+                case KEY_ID_1: SwitchMode(APP_MODE_VOICE);  break;  /* LED1 */
+                case KEY_ID_2: SwitchMode(APP_MODE_SENSOR); break;  /* LED2 */
+                case KEY_ID_3: SwitchMode(APP_MODE_REMOTE); break;  /* LED3 */
+                case KEY_ID_4:  /* LED4 动力模式：已在动力模式则切动作 */
+                    if (g_mode == APP_MODE_POWER) {
+                        Power_Execute((Power_Action_t)((g_power_action + 1) % POWER_ACT_COUNT));
+                    } else {
+                        SwitchMode(APP_MODE_POWER);
+                    }
+                    break;
+                default: break;
                 }
             }
             else if (ke == KEY_EVT_LONG && kid == KEY_ID_1) {
@@ -138,20 +154,29 @@ int main(void)
             Bsp_UartAsr_Event_t e;
             if (Bsp_UartAsr_TryRecv(&e)) {
                 if (e.type == ASR_EVT_CMD) {
-                    switch (e.arg) {
-                    /* 动作类命令（任何模式都执行电机）*/
-                    case ASR_CMD_FORWARD:  Power_Execute(POWER_ACT_FWD);   break;
-                    case ASR_CMD_BACKWARD: Power_Execute(POWER_ACT_BACK);  break;
-                    case ASR_CMD_LEFT:     Power_Execute(POWER_ACT_LEFT);  break;
-                    case ASR_CMD_RIGHT:    Power_Execute(POWER_ACT_RIGHT); break;
-                    case ASR_CMD_STOP:     Power_Execute(POWER_ACT_STOP);  break;
-                    /* 模式切换命令 */
-                    case ASR_CMD_ENTER_POWER:  SwitchMode(APP_MODE_POWER);  break;
-                    case ASR_CMD_ENTER_SENSOR: SwitchMode(APP_MODE_SENSOR); break;
-                    case ASR_CMD_ENTER_REMOTE: SwitchMode(APP_MODE_REMOTE); break;
-                    case ASR_CMD_ENTER_VOICE:  SwitchMode(APP_MODE_VOICE);  break;
-                    /* 单电机 cmd=40..45：M3 接入 */
-                    default: break;
+                    /* 动作类命令（30..34）800ms 防抖，防 ASRPRO 误识别连续发导致抖动；
+                       模式切换命令（50..53）不防抖。 */
+                    uint8_t is_action = (e.arg >= ASR_CMD_FORWARD && e.arg <= ASR_CMD_STOP);
+                    uint32_t now = Bsp_Tick_GetMs();
+                    if (is_action && (now - last_cmd_time < 800)) {
+                        /* 忽略 */
+                    } else {
+                        if (is_action) last_cmd_time = now;
+                        switch (e.arg) {
+                        /* 动作类命令（任何模式都执行电机）*/
+                        case ASR_CMD_FORWARD:  Power_Execute(POWER_ACT_FWD);   break;
+                        case ASR_CMD_BACKWARD: Power_Execute(POWER_ACT_BACK);  break;
+                        case ASR_CMD_LEFT:     Power_Execute(POWER_ACT_LEFT);  break;
+                        case ASR_CMD_RIGHT:    Power_Execute(POWER_ACT_RIGHT); break;
+                        case ASR_CMD_STOP:     Power_Execute(POWER_ACT_STOP);  break;
+                        /* 模式切换命令 */
+                        case ASR_CMD_ENTER_POWER:  SwitchMode(APP_MODE_POWER);  break;
+                        case ASR_CMD_ENTER_SENSOR: SwitchMode(APP_MODE_SENSOR); break;
+                        case ASR_CMD_ENTER_REMOTE: SwitchMode(APP_MODE_REMOTE); break;
+                        case ASR_CMD_ENTER_VOICE:  SwitchMode(APP_MODE_VOICE);  break;
+                        /* 单电机 cmd=40..45：M3 接入 */
+                        default: break;
+                        }
                     }
                 }
                 else if (e.type == ASR_EVT_WAKE) {
