@@ -44,7 +44,6 @@ typedef enum {
     REMOTE_KEY_B     = 7,
     REMOTE_KEY_R1    = 8,   /* R1Key */
     REMOTE_KEY_L1    = 9,   /* L1Key */
-    REMOTE_KEY_COUNT
 } Bsp_RemoteKey_t;
 
 /** 初始化 USART1 9600 8N1 + DMA 收 + IDLE，PF3 下拉输入 */
