@@ -555,6 +555,11 @@
           <GroupName>Bsp_Drivers</GroupName>
           <Files>
             <File>
+              <FileName>Bsp.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\BSP_Drivers\Bsp.c</FilePath>
+            </File>
+            <File>
               <FileName>Bsp_Tick.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\BSP_Drivers\Bsp_Tick\Bsp_Tick.c</FilePath>

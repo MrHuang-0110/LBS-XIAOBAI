@@ -1,14 +1,5 @@
 #include "main.h"
-#include "Bsp_Tick/Bsp_Tick.h"
-#include "Bsp_Led/Bsp_Led.h"
-#include "Bsp_Power/Bsp_Power.h"
-#include "Bsp_LedPwm/Bsp_LedPwm.h"
-#include "Bsp_UartAsr/Bsp_UartAsr.h"
-#include "Bsp_UartBle/Bsp_UartBle.h"
-#include "Bsp_Adc/Bsp_Adc.h"
-#include "Bsp_IR/Bsp_IR.h"
-#include "Bsp_Battery/Bsp_Battery.h"
-#include "Bsp_Tm1640/Bsp_Tm1640.h"
+#include "Bsp.h"
 
 static void APP_SystemClockConfig(void);
 
@@ -41,43 +32,16 @@ int main(void)
 {
     HAL_Init();
     APP_SystemClockConfig();
-    Bsp_Tick_Init();
-    Bsp_Led_Init();
-    if (!Bsp_Power_Init_WaitConfirm()) while (1) { }
+    BSP_Init();
 
-    Bsp_LedPwm_Init();
-    Bsp_LedPwm_PlayStartupBreath();
-
-    Bsp_UartAsr_Init();
-
-    /* ASRPRO 跟 MCU 同电源上电，但 ASRPRO 启动较慢。
-       全速下 MCU ~4.5s 后发 play=01 时 ASRPRO 可能还没 ready 会丢帧。
-       留 1.5s 让 ASRPRO 完成 boot + UART 初始化。 */
+    /* 应用层时序：等 ASRPRO 启动 + 播开机语 + 默认语音模式指示 */
     Bsp_Tick_DelayMs(1500);
-
-    /* 请求 ASRPRO 播开机语 */
     Bsp_UartAsr_SendPlay(ASR_VOICE_BOOT);
-
-    /* 默认语音模式：LED4 常亮 */
     Bsp_Led_On(LED_MODE_VOICE);
 
-    /* BLE (USART1 PB6/PB7 + DMA1_CH2 + IDLE + PF3 状态) */
-    Bsp_UartBle_Init();
-
-    /* 配置蓝牙名称（ECB00 默认从机透传，只需设名）。
-       留 500ms 让 BLE 模块完成上电 */
+    /* BLE 配名（BLE 上电后留 500ms） */
     Bsp_Tick_DelayMs(500);
     Bsp_UartBle_ConfigName("LBS_XIAOBAI", 11);
-
-    /* ADC 4 通道扫描 + DMA1_CH3 循环搬运（电池 + 3 路红外） */
-    Bsp_Adc_Init();
-
-    Bsp_IR_Init();          /* PF4 红外发射常亮 */
-    Bsp_Battery_Init();     /* 占位，ADC 已由 Bsp_Adc 管理 */
-
-    Bsp_Tm1640_Init();
-    /* 开机先清屏 */
-    Bsp_Tm1640_Clear();
 
     /* TM1640 亮灭控制测试：循环 全亮1s -> 灭1s，每 4 轮降一档亮度 */
     uint8_t tm_state = 0;        /* 0=亮 1=灭 */
