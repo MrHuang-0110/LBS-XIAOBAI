@@ -39,7 +39,7 @@ int main(void)
        留 500ms 让 BLE 模块完成上电 */
     Bsp_Tick_DelayMs(500);
     Bsp_UartBle_ConfigName("LBS_XIAOBAI", 11);
-
+ 
     /* PF3 连接状态边沿检测：断→通 触发 play=07，通→断 触发 play=08 */
     uint8_t ble_was_connected = Bsp_UartBle_IsConnected();
 
@@ -72,10 +72,15 @@ int main(void)
         }
         ble_was_connected = ble_now;
 
-        /* --- BLE 数据接收 + 遥控帧解析 --- */
+        /* --- BLE 数据接收 + 回显 + 遥控帧解析 --- */
         uint8_t buf[REMOTE_FRAME_LEN * 2];
         uint16_t n = Bsp_UartBle_TryRecv(buf, sizeof(buf));
         if (n) {
+            /* 回显：把收到的原始字节原样发回，验证 BLE 收发双向链路。
+               收到数据也翻转 LED2 做视觉确认。 */
+            Bsp_UartBle_Send(buf, n);
+            Bsp_Led_Toggle(LED_MODE_SENSOR);
+
             /* 遥控协议：5A 97 98 0A C1 [10字节键值] CRC A5，共 16 字节
                在 buf 里滑动找帧头 0x5A，校验通过就处理 */
             for (uint16_t i = 0; i + REMOTE_FRAME_LEN <= n; i++) {
