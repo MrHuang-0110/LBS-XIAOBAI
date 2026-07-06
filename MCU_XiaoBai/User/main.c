@@ -4,6 +4,7 @@
 #include "Bsp_Power/Bsp_Power.h"
 #include "Bsp_LedPwm/Bsp_LedPwm.h"
 #include "Bsp_UartAsr/Bsp_UartAsr.h"
+#include "Bsp_UartBle/Bsp_UartBle.h"
 
 static void APP_SystemClockConfig(void);
 
@@ -31,7 +32,11 @@ int main(void)
     /* 默认语音模式：LED4 常亮 */
     Bsp_Led_On(LED_MODE_VOICE);
 
+    /* BLE (USART1 PB6/PB7 + DMA1_CH2 + IDLE + PF3 状态) */
+    Bsp_UartBle_Init();
+
     while (1) {
+        /* --- ASRPRO 事件处理（Task 8 逻辑保留） --- */
         Bsp_UartAsr_Event_t e;
         if (Bsp_UartAsr_TryRecv(&e)) {
             switch (e.type) {
@@ -49,7 +54,17 @@ int main(void)
             default: break;
             }
         }
-		//	 Bsp_UartAsr_SendPlay(ASR_VOICE_BOOT);
+
+        /* --- BLE 回显 + PF3 连接状态 --- */
+        uint8_t buf[64];
+        uint16_t n = Bsp_UartBle_TryRecv(buf, sizeof(buf));
+        if (n) {
+            Bsp_UartBle_Send(buf, n);            /* echo */
+            Bsp_Led_Toggle(LED_MODE_SENSOR);     /* 收到数据翻转 LED2 */
+        }
+        if (Bsp_UartBle_IsConnected()) Bsp_Led_On(LED_MODE_POWER);
+        else                           Bsp_Led_Off(LED_MODE_POWER);
+
         Bsp_Tick_DelayMs(5);
     }
 }

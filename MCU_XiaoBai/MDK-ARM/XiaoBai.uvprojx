@@ -589,6 +589,11 @@
               <FileType>1</FileType>
               <FilePath>..\BSP_Drivers\Bsp_UartAsr\Bsp_UartAsr.c</FilePath>
             </File>
+            <File>
+              <FileName>Bsp_UartBle.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\BSP_Drivers\Bsp_UartBle\Bsp_UartBle.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
