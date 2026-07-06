@@ -68,6 +68,13 @@ void Bsp_UartAsr_SendStop(void);
 void Bsp_UartAsr_SendPing(void);
 
 /**
+ * @brief 发送原始字节（调试用，绕过协议格式化）。
+ *        直接 HAL_UART_Transmit，不加任何 tag/分隔符/帧尾。
+ *        供调试时把其它来源的数据透传到 ASRPRO 串口观察。
+ */
+void Bsp_UartAsr_SendRaw(const uint8_t *data, uint16_t len);
+
+/**
  * @brief 主循环轮询：取出一个已解析事件。
  *        无事件返回 0；有事件返回 1 并填充 out。
  */

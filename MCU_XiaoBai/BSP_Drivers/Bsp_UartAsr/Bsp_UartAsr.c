@@ -190,6 +190,11 @@ void Bsp_UartAsr_SendPlay(uint8_t voice_id)
 void Bsp_UartAsr_SendStop(void) { SendStr("stop", 4); }
 void Bsp_UartAsr_SendPing(void) { SendStr("ping", 4); }
 
+void Bsp_UartAsr_SendRaw(const uint8_t *data, uint16_t len)
+{
+    HAL_UART_Transmit(&huart, (uint8_t *)data, len, 50);
+}
+
 /* --- 接收 --- */
 
 uint8_t Bsp_UartAsr_TryRecv(Bsp_UartAsr_Event_t *out)

@@ -38,8 +38,8 @@ int main(void)
     /* 配置蓝牙名称（ECB00 默认从机透传，只需设名）。
        留 500ms 让 BLE 模块完成上电 */
     Bsp_Tick_DelayMs(500);
-    Bsp_UartBle_ConfigName("LBS_XIAOBAI", 11);
- 
+    //Bsp_UartBle_ConfigName("LBS_XIAOBAI", 11);
+    Bsp_UartBle_ConfigName("Spark_AI", 8);
     /* PF3 连接状态边沿检测：断→通 触发 play=07，通→断 触发 play=08 */
     uint8_t ble_was_connected = Bsp_UartBle_IsConnected();
 
@@ -76,8 +76,25 @@ int main(void)
         uint8_t buf[REMOTE_FRAME_LEN * 2];
         uint16_t n = Bsp_UartBle_TryRecv(buf, sizeof(buf));
         if (n) {
-            /* 收到数据翻转 LED2 做视觉确认（不回发，避免干扰遥控器） */
+            /* 收到数据翻转 LED2 做视觉确认 */
             Bsp_Led_Toggle(LED_MODE_SENSOR);
+
+            /* 调试：把收到的原始字节以 "RX:" + hex + "\r\n" 形式从
+               ASRPRO 串口(PF1 TX, 115200)发出去，便于用 USB-TTL 观察
+               完整帧内容。临时调试代码，验证完帧完整性后删除。 */
+            {
+                static const char hex[] = "0123456789ABCDEF";
+                uint8_t dbg[8 + (REMOTE_FRAME_LEN * 2) * 3];  /* 固定大小，够最大 n */
+                uint16_t k = 0;
+                dbg[k++]='R'; dbg[k++]='X'; dbg[k++]=':';
+                for (uint16_t i = 0; i < n; i++) {
+                    dbg[k++] = hex[buf[i] >> 4];
+                    dbg[k++] = hex[buf[i] & 0x0F];
+                    dbg[k++] = ' ';
+                }
+                dbg[k++] = '\r'; dbg[k++] = '\n';
+                Bsp_UartAsr_SendRaw(dbg, k);
+            }
 
             /* 遥控协议：5A 97 98 0A C1 [10字节键值] CRC A5，共 16 字节
                在 buf 里滑动找帧头 0x5A，校验通过就处理 */
