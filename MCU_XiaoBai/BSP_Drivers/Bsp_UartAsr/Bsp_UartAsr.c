@@ -1,4 +1,5 @@
 #include "Bsp_UartAsr/Bsp_UartAsr.h"
+#include "py32f0xx_ll_system.h"   /* LL_SYSCFG_SetDMARemap_CH1 */
 #include <string.h>
 
 /*
@@ -135,8 +136,10 @@ void Bsp_UartAsr_Init(void)
     gi.Pin       = GPIO_PIN_0 | GPIO_PIN_1;
     HAL_GPIO_Init(GPIOF, &gi);
 
-    /* SYSCFG DMA remap：USART2_RX -> DMA1_Channel1（request 0x08） */
-    HAL_SYSCFG_DMA_Req(0x08);
+    /* SYSCFG DMA remap：USART2_RX -> DMA1_Channel1
+       用 LL 库 MODIFY_REG 先清 DMA1_MAP 位域再写值，比 HAL_SYSCFG_DMA_Req
+       的 SET_BIT（只 OR 不清）更可靠。 */
+    LL_SYSCFG_SetDMARemap_CH1(LL_SYSCFG_DMA_MAP_USART2_RX);
 
     hdma_rx.Instance                 = DMA1_Channel1;
     hdma_rx.Init.Direction           = DMA_PERIPH_TO_MEMORY;
@@ -215,11 +218,18 @@ void HAL_UART_IdleFrameDetectCpltCallback(UART_HandleTypeDef *huart_p)
 
     static uint16_t last_pos = 0;
     if (cur != last_pos) {
+        /* 临时诊断：收到 USART2 数据时翻转 LED2（感应），验证 RX 链路 */
+        HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_10);
         Frame_FeedRange(last_pos, cur);
         last_pos = cur;
     }
 }
 
 /* 中断入口 */
-void Bsp_UartAsr_UART_IRQHandler(void) { HAL_UART_IRQHandler(&huart); }
+void Bsp_UartAsr_UART_IRQHandler(void)
+{
+    /* 临时诊断：USART2 中断触发就翻转 LED1(PB2)，区分中断有没有进 */
+    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_2);
+    HAL_UART_IRQHandler(&huart);
+}
 void Bsp_UartAsr_DMA_IRQHandler (void) { HAL_DMA_IRQHandler(&hdma_rx); }
