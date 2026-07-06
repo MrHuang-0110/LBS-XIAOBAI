@@ -17,17 +17,6 @@ static void FlashLeds(uint8_t times)
     }
 }
 
-/* 把 0..4095 写成 4 位十进制（前导零）到 p，返回写入字节数（恒为 4）。
-   不用 sprintf（未开微库），手动除 10 取余。 */
-static uint16_t put_dec(char *p, uint16_t v)
-{
-    p[0] = (char)('0' + (v / 1000U));   v %= 1000U;
-    p[1] = (char)('0' + (v / 100U));    v %= 100U;
-    p[2] = (char)('0' + (v / 10U));
-    p[3] = (char)('0' + (v % 10U));
-    return 4;
-}
-
 int main(void)
 {
     HAL_Init();
@@ -68,9 +57,6 @@ int main(void)
        在流里滑动找完整 17 字节帧，避免半帧被 TryRecv 切走。 */
     static uint8_t stream[REMOTE_FRAME_LEN * 4];
     uint16_t stream_len = 0;
-
-    /* ADC 调试打印节流：每 200ms 把 4 路值经 ASRPRO 串口(PF0/PF1@115200)发出 */
-    static uint32_t last_adc_print = 0;
 
     while (1) {
         /* --- 按键扫描（KEY1：短按切模式 / 长按关机） --- */
@@ -179,27 +165,6 @@ int main(void)
                 for (uint16_t k = 0; k < remain; k++) stream[k] = stream[i + k];
                 stream_len = remain;
             }
-        }
-
-        /* --- ADC 调试打印：每 200ms 把 4 路 ADC 值经 ASRPRO 串口发出 ---
-           USB-TTL 接 PF0/PF1 @115200 能看到 BAT/IR1/IR2/IR3 四路 0..4095 */
-        if (Bsp_Tick_GetMs() - last_adc_print >= 200) {
-            last_adc_print = Bsp_Tick_GetMs();
-            char line[48];
-            uint16_t k = 0;
-            line[k++]='B';line[k++]='A';line[k++]='T';line[k++]='=';
-            k += put_dec(&line[k], Bsp_Adc_Read(ADC_CH_BATTERY));
-            line[k++]=' ';
-            line[k++]='I';line[k++]='R';line[k++]='1';line[k++]='=';
-            k += put_dec(&line[k], Bsp_Adc_Read(ADC_CH_IR1));
-            line[k++]=' ';
-            line[k++]='I';line[k++]='R';line[k++]='2';line[k++]='=';
-            k += put_dec(&line[k], Bsp_Adc_Read(ADC_CH_IR2));
-            line[k++]=' ';
-            line[k++]='I';line[k++]='R';line[k++]='3';line[k++]='=';
-            k += put_dec(&line[k], Bsp_Adc_Read(ADC_CH_IR3));
-            line[k++]='\r'; line[k++]='\n';
-            Bsp_UartAsr_SendRaw((uint8_t*)line, k);
         }
 
         /* TM1640 亮灭控制：每 1000ms 切换亮/灭，每 8 轮降一档亮度到 0 再回到 7 */
