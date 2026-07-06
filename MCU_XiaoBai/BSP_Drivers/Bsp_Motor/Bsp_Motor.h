@@ -13,11 +13,19 @@ typedef enum {
     MOTOR_DIR_BACKWARD = 2,
 } Bsp_Motor_Dir_t;
 
-/** 初始化 TIM3 4 通道 PWM 20kHz，固定 90% duty，全部停止 */
+/* 速度档位（占空比）：1=40% / 2=70% / 3=100%。
+   文档 §11 遥控器 3 档速度对应这三档。 */
+typedef enum {
+    MOTOR_SPEED_LOW  = 1,   /* 40%  */
+    MOTOR_SPEED_MID  = 2,   /* 70%  */
+    MOTOR_SPEED_HIGH = 3,   /* 100% */
+} Bsp_Motor_Speed_t;
+
+/** 初始化 TIM3 4 通道 PWM 20kHz，全部停止 */
 void Bsp_Motor_Init(void);
 
-/** 设置某电机方向（正转/反转/停止），固定 90% 占空比 */
-void Bsp_Motor_Set(Bsp_Motor_Id_t id, Bsp_Motor_Dir_t dir);
+/** 设置某电机方向 + 速度档位 */
+void Bsp_Motor_Set(Bsp_Motor_Id_t id, Bsp_Motor_Dir_t dir, Bsp_Motor_Speed_t speed);
 
 /** 停两个电机 */
 void Bsp_Motor_StopAll(void);

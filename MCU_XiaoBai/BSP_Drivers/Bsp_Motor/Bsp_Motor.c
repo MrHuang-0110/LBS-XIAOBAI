@@ -13,7 +13,10 @@
  */
 
 #define MOTOR_TIM_PERIOD  2399U    /* 48MHz / (2400) = 20 kHz */
-#define MOTOR_DUTY_90     2160U    /* 2400 * 90% = 2160 */
+/* 3 档速度占空比（CCR 值）：40% / 70% / 100% */
+#define MOTOR_DUTY_40     960U     /* 2400 * 40% = 960  */
+#define MOTOR_DUTY_70     1680U    /* 2400 * 70% = 1680 */
+#define MOTOR_DUTY_100    2399U    /* 2400 * 100% = 2400，clamp 到 PERIOD */
 
 static TIM_HandleTypeDef htim3;
 
@@ -70,16 +73,28 @@ void Bsp_Motor_Init(void)
     htim3.Instance->EGR = TIM_EGR_UG;
 }
 
-static void Motor_Drive(uint32_t ch_a, uint32_t ch_b, Bsp_Motor_Dir_t dir)
+static void Motor_Drive(uint32_t ch_a, uint32_t ch_b, Bsp_Motor_Dir_t dir, Bsp_Motor_Speed_t speed)
 {
+    /* 速度档位 -> CCR 值 */
+    static const uint32_t duty_tbl[4] = {
+        0,              /* 占位，speed 从 1 开始 */
+        MOTOR_DUTY_40,  /* MOTOR_SPEED_LOW  = 1 */
+        MOTOR_DUTY_70,  /* MOTOR_SPEED_MID  = 2 */
+        MOTOR_DUTY_100, /* MOTOR_SPEED_HIGH = 3 */
+    };
+    uint8_t s = (uint8_t)speed;
+    if (s < 1) s = 1;
+    if (s > 3) s = 3;
+    uint32_t duty = duty_tbl[s];
+
     switch (dir) {
     case MOTOR_DIR_FORWARD:
-        __HAL_TIM_SET_COMPARE(&htim3, ch_a, MOTOR_DUTY_90);
+        __HAL_TIM_SET_COMPARE(&htim3, ch_a, duty);
         __HAL_TIM_SET_COMPARE(&htim3, ch_b, 0);
         break;
     case MOTOR_DIR_BACKWARD:
         __HAL_TIM_SET_COMPARE(&htim3, ch_a, 0);
-        __HAL_TIM_SET_COMPARE(&htim3, ch_b, MOTOR_DUTY_90);
+        __HAL_TIM_SET_COMPARE(&htim3, ch_b, duty);
         break;
     case MOTOR_DIR_STOP:
     default:
@@ -89,12 +104,12 @@ static void Motor_Drive(uint32_t ch_a, uint32_t ch_b, Bsp_Motor_Dir_t dir)
     }
 }
 
-void Bsp_Motor_Set(Bsp_Motor_Id_t id, Bsp_Motor_Dir_t dir)
+void Bsp_Motor_Set(Bsp_Motor_Id_t id, Bsp_Motor_Dir_t dir, Bsp_Motor_Speed_t speed)
 {
     if (id == MOTOR_LEFT)
-        Motor_Drive(TIM_CHANNEL_1, TIM_CHANNEL_2, dir);
+        Motor_Drive(TIM_CHANNEL_1, TIM_CHANNEL_2, dir, speed);
     else
-        Motor_Drive(TIM_CHANNEL_3, TIM_CHANNEL_4, dir);
+        Motor_Drive(TIM_CHANNEL_3, TIM_CHANNEL_4, dir, speed);
 }
 
 void Bsp_Motor_StopAll(void)
