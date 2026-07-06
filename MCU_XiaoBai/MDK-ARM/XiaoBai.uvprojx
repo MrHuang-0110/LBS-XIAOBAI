@@ -594,6 +594,11 @@
               <FileType>1</FileType>
               <FilePath>..\BSP_Drivers\Bsp_UartBle\Bsp_UartBle.c</FilePath>
             </File>
+            <File>
+              <FileName>Bsp_Adc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\BSP_Drivers\Bsp_Adc\Bsp_Adc.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
