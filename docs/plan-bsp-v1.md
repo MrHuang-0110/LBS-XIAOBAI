@@ -1544,6 +1544,16 @@ git commit -m "feat(bsp): USART2 to ASRPRO with DMA+IDLE and 6-byte frame parser
 
 ### Task 9: Bsp_UartBle - USART1 (PB6/PB7) + DMA + IDLE 中断 + PF3 状态
 
+> **实施后变更（2026-07-06）：** 根据 ECB00CV2 数据手册（V1.4）和遥控协议.md 调整：
+> 1. **波特率改为 9600**（ECB00 默认，手册第 10 页；手册未提供改波特率的 AT 命令）
+> 2. **PF3 配下拉输入**（手册第 4 页要求；STA 高=连接、低=断开）
+> 3. **连接状态只用 PF3**（芯片虽会在 TXD 发 CONNECT OK/DISCONNECT，但本项目不解析）
+> 4. **BLE 名称配置**：新增 `Bsp_UartBle_ConfigName()`，发 `AT+NAME=<name>\r\n`，ECB00 默认从机透传无需配主从
+> 5. **遥控协议解析**：帧 `5A 97 98 0A C1 [10字节键值位图] CRC A5` 共 16 字节，10 字节位图每键 1 字节，顺序跟 enum 一致（Up/Down/Left/Right/Y/A/X/B/R1/L1）。CRC = 帧头到数据位末位的累加和低 8 位
+> 6. **业务联动**：PF3 断→通 触发 `play=07`（蓝牙已连接），通→断 触发 `play=08`（蓝牙已断开）
+>
+> 以下 plan 原文保留作历史参考，以最终代码为准。
+
 **Files:**
 
 - Create: `MCU_XiaoBai/BSP_Drivers/Bsp_UartBle/Bsp_UartBle.h`

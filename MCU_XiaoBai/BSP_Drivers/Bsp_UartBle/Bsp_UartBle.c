@@ -50,9 +50,9 @@ static void Ble_GpioClkInit(void)
     gi.Pin       = GPIO_PIN_6 | GPIO_PIN_7;
     HAL_GPIO_Init(GPIOB, &gi);
 
-    /* PF3 BLE_STA 输入（主循环轮询，不用中断） */
+    /* PF3 BLE_STA 输入，下拉（datasheet 第 4 页要求单片机配下拉输入） */
     gi.Mode = GPIO_MODE_INPUT;
-    gi.Pull = GPIO_NOPULL;
+    gi.Pull = GPIO_PULLDOWN;
     gi.Pin  = GPIO_PIN_3;
     HAL_GPIO_Init(GPIOF, &gi);
 }
@@ -62,7 +62,7 @@ void Bsp_UartBle_Init(void)
     Ble_GpioClkInit();
 
     huart.Instance          = USART1;
-    huart.Init.BaudRate     = 115200;
+    huart.Init.BaudRate     = 9600;          /* ECB00 默认 9600（datasheet 第 10 页）*/
     huart.Init.WordLength   = UART_WORDLENGTH_8B;
     huart.Init.StopBits     = UART_STOPBITS_1;
     huart.Init.Parity       = UART_PARITY_NONE;
@@ -100,6 +100,21 @@ void Bsp_UartBle_Init(void)
 void Bsp_UartBle_Send(const uint8_t *data, uint16_t len)
 {
     HAL_UART_Transmit(&huart, (uint8_t *)data, len, 20);
+}
+
+void Bsp_UartBle_ConfigName(const char *name, uint8_t len)
+{
+    /* 发送 AT+NAME=<name>\r\n
+       ECB00 收到 AT 开头的串就当 AT 命令处理（datasheet 第 7 页）。
+       蓝牙名最长 22 字节，这里不做越界检查，调用方负责。 */
+    if (len > 22U) len = 22U;
+    uint8_t tx[32];
+    uint16_t n = 0;
+    tx[n++] = 'A'; tx[n++] = 'T'; tx[n++] = '+';
+    tx[n++] = 'N'; tx[n++] = 'A'; tx[n++] = 'M'; tx[n++] = 'E'; tx[n++] = '=';
+    for (uint8_t i = 0; i < len; i++) tx[n++] = (uint8_t)name[i];
+    tx[n++] = '\r'; tx[n++] = '\n';
+    HAL_UART_Transmit(&huart, tx, n, 50);
 }
 
 uint16_t Bsp_UartBle_TryRecv(uint8_t *out_buf, uint16_t max_len)
