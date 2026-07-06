@@ -59,9 +59,15 @@ uint8_t Bsp_Power_Init_WaitConfirm(void)
         if (elapsed >= WAIT_TOTAL_MS) {
             /* 长按满 2s：立即锁存电源 */
             HAL_GPIO_WritePin(PWR_CTRL_PORT, PWR_CTRL_PIN, GPIO_PIN_SET);
-            /* 开机成功指示：4 只 LED 快速滚动 3 圈（不等 KEY1 释放，用户可能还按着） */
+            /* 先保持 4 灯全亮 200ms，让用户看清"确认成功" */
             Bsp_Led_AllOff();
-            for (uint8_t round = 0; round < 3; round++) {
+            Bsp_Led_On(LED_MODE_POWER);
+            Bsp_Led_On(LED_MODE_SENSOR);
+            Bsp_Led_On(LED_MODE_REMOTE);
+            Bsp_Led_On(LED_MODE_VOICE);
+            Bsp_Tick_DelayMs(200);
+            /* 开机成功指示：4 只 LED 快速滚动 2 圈 */
+            for (uint8_t round = 0; round < 2; round++) {
                 for (uint8_t i = 0; i < LED_MODE_COUNT; i++) {
                     Bsp_Led_AllOff();
                     Bsp_Led_On((Bsp_Led_Id_t)i);
