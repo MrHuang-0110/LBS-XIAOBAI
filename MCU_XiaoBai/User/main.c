@@ -20,6 +20,11 @@ int main(void)
 
     Bsp_UartAsr_Init();
 
+    /* ASRPRO 跟 MCU 同电源上电，但 ASRPRO 启动较慢。
+       全速下 MCU ~4.5s 后发 play=01 时 ASRPRO 可能还没 ready 会丢帧。
+       留 1.5s 让 ASRPRO 完成 boot + UART 初始化。 */
+    Bsp_Tick_DelayMs(1500);
+
     /* 请求 ASRPRO 播开机语 */
     Bsp_UartAsr_SendPlay(ASR_VOICE_BOOT);
 
@@ -44,6 +49,7 @@ int main(void)
             default: break;
             }
         }
+		//	 Bsp_UartAsr_SendPlay(ASR_VOICE_BOOT);
         Bsp_Tick_DelayMs(5);
     }
 }
