@@ -20,8 +20,8 @@ int main(void)
 
     Bsp_UartAsr_Init();
 
-    /* 请求 ASRPRO 播开机语 (voice ID 0x01) */
-    Bsp_UartAsr_SendPlay(0x01);
+    /* 请求 ASRPRO 播开机语 */
+    Bsp_UartAsr_SendPlay(ASR_VOICE_BOOT);
 
     /* 默认语音模式：LED4 常亮 */
     Bsp_Led_On(LED_MODE_VOICE);
@@ -35,8 +35,8 @@ int main(void)
                 Bsp_Led_Toggle(LED_MODE_REMOTE);
                 break;
             case ASR_EVT_WAKE:
-                /* 唤醒 -- 回一句 "收到" (voice ID 0x0A) */
-                Bsp_UartAsr_SendPlay(0x0A);
+                /* 唤醒 -- 回一句"收到" */
+                Bsp_UartAsr_SendPlay(ASR_VOICE_RECEIVED);
                 break;
             case ASR_EVT_DONE:
                 /* 播报完成，暂不处理 */

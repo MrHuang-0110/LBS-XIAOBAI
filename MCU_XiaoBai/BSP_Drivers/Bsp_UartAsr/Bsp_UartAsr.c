@@ -2,15 +2,17 @@
 #include <string.h>
 
 /*
- * 语音协议 v0.2 实现：ASCII 文本，\r\n 分帧
+ * 语音协议 v0.3 实现：ASCII 文本，\r\n 分帧。
+ *   MCU 发：<tag>=<dec>\r\n  或  <tag>\r\n
+ *   MCU 收：<tag>:<dec>\r\n  或  <tag>\r\n
  *
  * 接收路径：DMA 循环 + UART IDLE 中断
  *   - HAL_UART_IdleFrameDetectCpltCallback 里读 DMA 剩余字节数，
- *     从 DMA 缓冲增量段一字节一字节喂进字符状态机 Frame_FeedByte。
+ *     从缓冲增量段一字节一字节喂进字符状态机 Frame_FeedByte。
  *   - 状态机把 \r\n 之间的字符组成一行，分派到 Line_Dispatch 解析。
  *   - 解析成功的事件推进环形队列，主循环 Bsp_UartAsr_TryRecv 取。
  *
- * 发送路径：把 tag[:hh] 组装成字符串，HAL_UART_Transmit 阻塞发送。
+ * 发送路径：把 "tag[=NN]\r\n" 组装成字符串，HAL_UART_Transmit 阻塞发送。
  */
 
 #define RX_DMA_BUF_SIZE   64U     /* DMA 循环缓冲 */
@@ -39,24 +41,24 @@ static void Evt_Push(Bsp_UartAsr_EvtType_t t, uint8_t arg)
     g_qw = next;
 }
 
-/* 单字符 hex -> 0..15，失败返回 0xFF */
-static uint8_t Hex1(uint8_t c)
+/* 从形如 "cmd:30" 里取 ":NN" 部分（十进制），返回 0=OK/非 0=错。
+ * 允许 1..3 位十进制数字，值范围 0..255。*/
+static uint8_t Parse_ColonDec(const uint8_t *line, uint16_t len, uint16_t tag_len, uint8_t *out)
 {
-    if (c >= '0' && c <= '9') return (uint8_t)(c - '0');
-    if (c >= 'a' && c <= 'f') return (uint8_t)(c - 'a' + 10);
-    if (c >= 'A' && c <= 'F') return (uint8_t)(c - 'A' + 10);
-    return 0xFF;
-}
-
-/* 从形如 "cmd:30" 里取 ":XX" 部分，成功返回 0 并填 *out */
-static uint8_t Parse_ColonHex(const uint8_t *line, uint16_t len, uint16_t tag_len, uint8_t *out)
-{
-    if (len != tag_len + 3) return 1;         /* 只允许恰好 tag:XX 长度 */
+    if (len < tag_len + 2) return 1;             /* 至少 tag: + 1 位 */
     if (line[tag_len] != ':') return 1;
-    uint8_t hi = Hex1(line[tag_len + 1]);
-    uint8_t lo = Hex1(line[tag_len + 2]);
-    if (hi == 0xFF || lo == 0xFF) return 2;
-    *out = (uint8_t)((hi << 4) | lo);
+
+    uint16_t val = 0;
+    uint16_t digits = 0;
+    for (uint16_t i = tag_len + 1; i < len; i++) {
+        uint8_t c = line[i];
+        if (c < '0' || c > '9') return 2;
+        val = val * 10U + (uint16_t)(c - '0');
+        digits++;
+        if (digits > 3 || val > 255U) return 2;
+    }
+    if (digits == 0) return 2;
+    *out = (uint8_t)val;
     return 0;
 }
 
@@ -70,16 +72,16 @@ static void Line_Dispatch(const uint8_t *line, uint16_t len)
         Evt_Push(ASR_EVT_WAKE, 0);
         return;
     }
-    /* cmd:XX\r\n */
+    /* cmd:NN\r\n */
     if (len >= 3 && memcmp(line, "cmd", 3) == 0) {
         uint8_t v;
-        if (Parse_ColonHex(line, len, 3, &v) == 0) Evt_Push(ASR_EVT_CMD, v);
+        if (Parse_ColonDec(line, len, 3, &v) == 0) Evt_Push(ASR_EVT_CMD, v);
         return;
     }
-    /* done:XX\r\n */
+    /* done:NN\r\n */
     if (len >= 4 && memcmp(line, "done", 4) == 0) {
         uint8_t v;
-        if (Parse_ColonHex(line, len, 4, &v) == 0) Evt_Push(ASR_EVT_DONE, v);
+        if (Parse_ColonDec(line, len, 4, &v) == 0) Evt_Push(ASR_EVT_DONE, v);
         return;
     }
     /* 其它 tag 忽略 */
@@ -175,15 +177,16 @@ static void SendStr(const char *s, uint16_t len)
     HAL_UART_Transmit(&huart, (uint8_t *)s, len, 20);
 }
 
-static uint8_t Nibble(uint8_t v) { return (uint8_t)(v < 10 ? ('0' + v) : ('a' + v - 10)); }
-
 void Bsp_UartAsr_SendPlay(uint8_t voice_id)
 {
-    char buf[9];   /* "play:XX\r\n" = 9 字节 */
-    buf[0] = 'p'; buf[1] = 'l'; buf[2] = 'a'; buf[3] = 'y';
-    buf[4] = ':';
-    buf[5] = (char)Nibble((uint8_t)(voice_id >> 4));
-    buf[6] = (char)Nibble((uint8_t)(voice_id & 0x0F));
+    /* 协议约定语音 ID 都在 1..99 之间，统一 2 位十进制补零：
+       voice_id=1  -> "play=01\r\n"
+       voice_id=10 -> "play=10\r\n" */
+    if (voice_id > 99U) voice_id = 99U;   /* 保护，防越界 */
+    char buf[9];
+    buf[0] = 'p'; buf[1] = 'l'; buf[2] = 'a'; buf[3] = 'y'; buf[4] = '=';
+    buf[5] = (char)('0' + (voice_id / 10U));
+    buf[6] = (char)('0' + (voice_id % 10U));
     buf[7] = '\r'; buf[8] = '\n';
     SendStr(buf, 9);
 }
