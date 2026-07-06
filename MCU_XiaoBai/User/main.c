@@ -89,25 +89,6 @@ int main(void)
                 Bsp_UartBle_Send(buf, echo_len);
             }
 
-            /* 调试：把收到的原始字节以 "RX:" + hex + "\r\n" 形式从
-               ASRPRO 串口(PF1 TX, 115200)发出去，便于用 USB-TTL 观察
-               完整帧内容。临时调试代码，验证完帧完整性后删除。 */
-            {
-                static const char hex[] = "0123456789ABCDEF";
-                uint8_t dbg[8 + (REMOTE_FRAME_LEN * 2) * 3];  /* 固定大小，够最大 n */
-                uint16_t k = 0;
-                dbg[k++]='R'; dbg[k++]='X'; dbg[k++]=':';
-                for (uint16_t i = 0; i < n; i++) {
-                    dbg[k++] = hex[buf[i] >> 4];
-                    dbg[k++] = hex[buf[i] & 0x0F];
-                    dbg[k++] = ' ';
-                }
-                dbg[k++] = '\r'; dbg[k++] = '\n';
-                Bsp_Led_On(LED_MODE_REMOTE);   /* 标记：即将调 SendRaw */
-                Bsp_UartAsr_SendRaw(dbg, k);
-                Bsp_Led_Off(LED_MODE_REMOTE);  /* SendRaw 返回后灭 */
-            }
-
             /* 遥控协议：5A 97 98 0A C1 [10字节键值] CRC A5，共 16 字节
                在 buf 里滑动找帧头 0x5A，校验通过就处理 */
             for (uint16_t i = 0; i + REMOTE_FRAME_LEN <= n; i++) {
