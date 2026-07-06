@@ -599,6 +599,16 @@
               <FileType>1</FileType>
               <FilePath>..\BSP_Drivers\Bsp_Adc\Bsp_Adc.c</FilePath>
             </File>
+            <File>
+              <FileName>Bsp_IR.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\BSP_Drivers\Bsp_IR\Bsp_IR.c</FilePath>
+            </File>
+            <File>
+              <FileName>Bsp_Battery.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\BSP_Drivers\Bsp_Battery\Bsp_Battery.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

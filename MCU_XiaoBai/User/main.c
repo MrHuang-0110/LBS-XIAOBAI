@@ -6,6 +6,8 @@
 #include "Bsp_UartAsr/Bsp_UartAsr.h"
 #include "Bsp_UartBle/Bsp_UartBle.h"
 #include "Bsp_Adc/Bsp_Adc.h"
+#include "Bsp_IR/Bsp_IR.h"
+#include "Bsp_Battery/Bsp_Battery.h"
 
 static void APP_SystemClockConfig(void);
 
@@ -69,18 +71,8 @@ int main(void)
     /* ADC 4 通道扫描 + DMA1_CH3 循环搬运（电池 + 3 路红外） */
     Bsp_Adc_Init();
 
-    /* 临时：PF4 红外发射控制拉高，点亮三路红外发射灯，方便测 ADC 反射值。
-       Task 11(Bsp_IR) 正式做时会抽到独立模块。 */
-    {
-        __HAL_RCC_GPIOF_CLK_ENABLE();
-        GPIO_InitTypeDef gi = {0};
-        gi.Mode  = GPIO_MODE_OUTPUT_PP;
-        gi.Pull  = GPIO_NOPULL;
-        gi.Speed = GPIO_SPEED_FREQ_LOW;
-        gi.Pin   = GPIO_PIN_4;
-        HAL_GPIO_Init(GPIOF, &gi);
-        HAL_GPIO_WritePin(GPIOF, GPIO_PIN_4, GPIO_PIN_SET);
-    }
+    Bsp_IR_Init();          /* PF4 红外发射常亮 */
+    Bsp_Battery_Init();     /* 占位，ADC 已由 Bsp_Adc 管理 */
 
     /* PF3 连接状态边沿检测：断→通 触发 play=07，通→断 触发 play=08 */
     uint8_t ble_was_connected = Bsp_UartBle_IsConnected();
