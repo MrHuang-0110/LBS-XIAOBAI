@@ -76,7 +76,17 @@ int main(void)
     Bsp_Battery_Init();     /* 占位，ADC 已由 Bsp_Adc 管理 */
 
     Bsp_Tm1640_Init();
- 
+    /* 开机先清屏 */
+    Bsp_Tm1640_Clear();
+
+    /* TM1640 亮灭控制测试：循环 全亮1s -> 灭1s，每 4 轮降一档亮度 */
+    uint8_t tm_state = 0;        /* 0=亮 1=灭 */
+    uint8_t tm_bright = 7;       /* 0..7 */
+    uint8_t tm_cycle = 0;        /* 计数到 8 降一档亮度 */
+    uint32_t tm_t = Bsp_Tick_GetMs();
+    static const uint8_t all_on[14] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+                                       0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+
     /* PF3 连接状态边沿检测：断→通 触发 play=07，通→断 触发 play=08 */
     uint8_t ble_was_connected = Bsp_UartBle_IsConnected();
 
@@ -195,12 +205,26 @@ int main(void)
             line[k++]='\r'; line[k++]='\n';
             Bsp_UartAsr_SendRaw((uint8_t*)line, k);
         }
-    /* 临时全亮测试：16 个显存地址全写 0xFF，验证 TM1640 能否被点亮。
-       若全亮 -> 时序对，问题在位图/地址；若不亮 -> 时序或硬件没通。 */
-    {
-        uint8_t all_on[14] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
-        Bsp_Tm1640_Refresh(all_on);
-    }
+
+        /* TM1640 亮灭控制：每 1000ms 切换亮/灭，每 8 轮降一档亮度到 0 再回到 7 */
+        {
+            uint32_t now = Bsp_Tick_GetMs();
+            if (now - tm_t >= 1000) {
+                tm_t = now;
+                tm_state = !tm_state;
+                if (tm_state) {
+                    Bsp_Tm1640_Clear();              /* 灭 */
+                } else {
+                    Bsp_Tm1640_SetBrightness(tm_bright);
+                    Bsp_Tm1640_Refresh(all_on);      /* 亮，当前亮度 */
+                    tm_cycle++;
+                    if (tm_cycle >= 8) {
+                        tm_cycle = 0;
+                        tm_bright = (tm_bright == 0) ? 7 : (tm_bright - 1);
+                    }
+                }
+            }
+        }
 
         Bsp_Tick_DelayMs(5);
     }
