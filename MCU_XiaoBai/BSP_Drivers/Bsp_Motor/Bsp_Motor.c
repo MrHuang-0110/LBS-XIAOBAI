@@ -114,6 +114,7 @@ void Bsp_Motor_Set(Bsp_Motor_Id_t id, Bsp_Motor_Dir_t dir, Bsp_Motor_Speed_t spe
 
 void Bsp_Motor_StopAll(void)
 {
-    Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_STOP);
-    Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_STOP);
+    /* 停机占空比为 0，speed 参数无实际影响，给 HIGH 占位 */
+    Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_STOP, MOTOR_SPEED_HIGH);
+    Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_STOP, MOTOR_SPEED_HIGH);
 }
