@@ -8,6 +8,7 @@
 #include "Bsp_Adc/Bsp_Adc.h"
 #include "Bsp_IR/Bsp_IR.h"
 #include "Bsp_Battery/Bsp_Battery.h"
+#include "Bsp_Tm1640/Bsp_Tm1640.h"
 
 static void APP_SystemClockConfig(void);
 
@@ -73,6 +74,14 @@ int main(void)
 
     Bsp_IR_Init();          /* PF4 红外发射常亮 */
     Bsp_Battery_Init();     /* 占位，ADC 已由 Bsp_Adc 管理 */
+
+    Bsp_Tm1640_Init();
+    /* 显示一个"笑脸"位图：两个 3x3 方块作眼睛 */
+    static const uint8_t g_smile[14] = {
+        0x1C, 0x22, 0x22, 0x22, 0x1C, 0x00, 0x00,
+        0x00, 0x00, 0x1C, 0x22, 0x22, 0x22, 0x1C,
+    };
+    Bsp_Tm1640_Refresh(g_smile);
 
     /* PF3 连接状态边沿检测：断→通 触发 play=07，通→断 触发 play=08 */
     uint8_t ble_was_connected = Bsp_UartBle_IsConnected();

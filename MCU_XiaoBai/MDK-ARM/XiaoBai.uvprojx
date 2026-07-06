@@ -609,6 +609,11 @@
               <FileType>1</FileType>
               <FilePath>..\BSP_Drivers\Bsp_Battery\Bsp_Battery.c</FilePath>
             </File>
+            <File>
+              <FileName>Bsp_Tm1640.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\BSP_Drivers\Bsp_Tm1640\Bsp_Tm1640.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
