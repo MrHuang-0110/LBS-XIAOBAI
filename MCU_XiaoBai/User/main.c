@@ -21,14 +21,14 @@ typedef enum {
 } Power_Action_t;
 
 /* 模式 -> 对应 LED（KEY-LED 一一对应，2026-07-06 变更）：
-     语音->LED1 / 感应->LED2 / 遥控->LED3 / 动力->LED4
+     语音->LED1 / 感应->LED2 / 遥控->LED4 / 动力->LED3
    注：Bsp_Led 枚举名 LED_MODE_POWER 实际是 LED1(PB2)，LED_MODE_VOICE 是 LED4(PA12)，
    名称跟模式不对应，但 mode_led[] 按物理 LED 映射，逻辑正确。 */
 static const Bsp_Led_Id_t mode_led[APP_MODE_COUNT] = {
     LED_MODE_POWER,   /* APP_MODE_VOICE  -> LED1 */
-    LED_MODE_VOICE,   /* APP_MODE_POWER  -> LED4 */
+    LED_MODE_REMOTE,  /* APP_MODE_POWER  -> LED3 */
     LED_MODE_SENSOR,  /* APP_MODE_SENSOR -> LED2 */
-    LED_MODE_REMOTE,  /* APP_MODE_REMOTE -> LED3 */
+    LED_MODE_VOICE,   /* APP_MODE_REMOTE -> LED4 */
 };
 /* 模式 -> 进入时播报的语音 ID */
 static const uint8_t mode_voice[APP_MODE_COUNT] = {
