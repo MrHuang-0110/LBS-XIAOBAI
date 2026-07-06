@@ -8,6 +8,20 @@
 
 static void APP_SystemClockConfig(void);
 
+/* 4 只模式 LED 同步闪 N 下（每下亮 100ms 灭 100ms） */
+static void FlashLeds(uint8_t times)
+{
+    for (uint8_t t = 0; t < times; t++) {
+        Bsp_Led_On(LED_MODE_POWER);
+        Bsp_Led_On(LED_MODE_SENSOR);
+        Bsp_Led_On(LED_MODE_REMOTE);
+        Bsp_Led_On(LED_MODE_VOICE);
+        Bsp_Tick_DelayMs(100);
+        Bsp_Led_AllOff();
+        Bsp_Tick_DelayMs(100);
+    }
+}
+
 int main(void)
 {
     HAL_Init();
@@ -39,7 +53,7 @@ int main(void)
        留 500ms 让 BLE 模块完成上电 */
     Bsp_Tick_DelayMs(500);
     Bsp_UartBle_ConfigName("LBS_XIAOBAI", 11);
-    //Bsp_UartBle_ConfigName("Spark_AI", 8);
+
     /* PF3 连接状态边沿检测：断→通 触发 play=07，通→断 触发 play=08 */
     uint8_t ble_was_connected = Bsp_UartBle_IsConnected();
 
@@ -76,19 +90,6 @@ int main(void)
         uint8_t buf[REMOTE_FRAME_LEN * 2];
         uint16_t n = Bsp_UartBle_TryRecv(buf, sizeof(buf));
         if (n) {
-            /* 收到数据翻转 LED2 做视觉确认 */
-            Bsp_Led_Toggle(LED_MODE_SENSOR);
-
-            /* 调试：BLE 回显 -- 把收到的原始字节原样从 BLE 串口发回。
-               方便用 USB-TTL 接 PB6/PB7 手动发送验证收发链路。
-               ECB00 手册规定每次发送最多 20 字节，否则高速通讯会破坏
-               蓝牙收发，所以回显截断到 20 字节。
-               验证完删除这行 Bsp_UartBle_Send。 */
-            {
-                uint16_t echo_len = n > 20 ? 20 : n;
-                Bsp_UartBle_Send(buf, echo_len);
-            }
-
             /* 遥控协议：5A 97 98 0A C1 [10字节键值] CRC A5，共 16 字节
                在 buf 里滑动找帧头 0x5A，校验通过就处理 */
             for (uint16_t i = 0; i + REMOTE_FRAME_LEN <= n; i++) {
@@ -101,13 +102,22 @@ int main(void)
                 for (uint16_t j = 0; j < REMOTE_FRAME_LEN - 2; j++) crc += buf[i + j];
                 if (crc != buf[i + REMOTE_FRAME_LEN - 2]) continue;
 
-                /* 帧有效，扫描 10 个键值位图 */
+                /* 帧有效，扫描 10 个键值位图，按按键分级闪 LED：
+                   方向键(上下左右) 闪 1 下；Y/A/X/B 闪 2 下；L1/R1 闪 3 下 */
                 uint8_t *keys = &buf[i + 5];
-                if (keys[REMOTE_KEY_UP])    Bsp_Led_Toggle(LED_MODE_POWER);   /* 上 */
-                if (keys[REMOTE_KEY_DOWN])  Bsp_Led_Toggle(LED_MODE_SENSOR); /* 下 */
-                if (keys[REMOTE_KEY_LEFT])  Bsp_Led_Toggle(LED_MODE_REMOTE); /* 左 */
-                if (keys[REMOTE_KEY_RIGHT]) Bsp_Led_Toggle(LED_MODE_VOICE);  /* 右 */
-                /* 其它键（Y/A/X/B/R1/L1）暂不处理，业务层接入时再扩展 */
+                uint8_t  flashes = 0;
+                if (keys[REMOTE_KEY_UP]    || keys[REMOTE_KEY_DOWN] ||
+                    keys[REMOTE_KEY_LEFT]  || keys[REMOTE_KEY_RIGHT]) {
+                    flashes = 1;
+                }
+                if (keys[REMOTE_KEY_Y] || keys[REMOTE_KEY_A] ||
+                    keys[REMOTE_KEY_X] || keys[REMOTE_KEY_B]) {
+                    flashes = 2;
+                }
+                if (keys[REMOTE_KEY_L1] || keys[REMOTE_KEY_R1]) {
+                    flashes = 3;
+                }
+                if (flashes) FlashLeds(flashes);
 
                 i += REMOTE_FRAME_LEN - 1;   /* 跳过已消费的帧 */
             }
