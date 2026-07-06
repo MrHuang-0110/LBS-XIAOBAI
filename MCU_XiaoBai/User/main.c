@@ -79,6 +79,11 @@ int main(void)
             /* 收到数据翻转 LED2 做视觉确认 */
             Bsp_Led_Toggle(LED_MODE_SENSOR);
 
+            /* 调试：BLE 回显 -- 把收到的原始字节原样从 BLE 串口发回。
+               方便用 USB-TTL 接 PB6/PB7 手动发送验证收发链路。
+               验证完删除这行 Bsp_UartBle_Send。 */
+            Bsp_UartBle_Send(buf, n);
+
             /* 调试：把收到的原始字节以 "RX:" + hex + "\r\n" 形式从
                ASRPRO 串口(PF1 TX, 115200)发出去，便于用 USB-TTL 观察
                完整帧内容。临时调试代码，验证完帧完整性后删除。 */
