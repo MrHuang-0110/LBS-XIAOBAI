@@ -14,19 +14,36 @@
    48MHz 主频下 20 次 NOP + 循环开销约 1-2µs，留足裕量。 */
 static void Delay_Bit(void) { for (volatile int i = 0; i < 30; i++) __NOP(); }
 
-static void tm_Start(void) { CLK_H(); DIN_H(); Delay_Bit(); DIN_L(); Delay_Bit(); CLK_L(); }
-static void tm_Stop(void)  { CLK_L(); DIN_L(); Delay_Bit(); CLK_H(); Delay_Bit(); DIN_H(); }
+/* Start：CLK 高时 DIN 由高变低（datasheet 第 4 页）。
+   进入时 CLK/DIN 状态任意，先规整到 CLK高/DIN高 再产生下降沿。 */
+static void tm_Start(void)
+{
+    CLK_H(); DIN_H(); Delay_Bit();
+    DIN_L(); Delay_Bit();   /* CLK 高时 DIN 由高变低 = Start */
+    CLK_L(); Delay_Bit();   /* 拉低 CLK 准备传第一位 */
+}
+
+/* Stop：CLK 高时 DIN 由低变高。调用前 WriteByte 结束时 CLK 已高。 */
+static void tm_Stop(void)
+{
+    CLK_L(); Delay_Bit();       /* 先拉低 CLK，准备让 DIN 进入已知态 */
+    DIN_L(); Delay_Bit();
+    CLK_H(); Delay_Bit();       /* CLK 升高，此时 DIN=低 */
+    DIN_H(); Delay_Bit();       /* CLK 高时 DIN 由低变高 = Stop */
+}
 
 static void tm_WriteByte(uint8_t b)
 {
     for (int i = 0; i < 8; i++) {
+        /* CLK 低时改变 DIN（datasheet：CLK 低电平时 DIN 才能变） */
         CLK_L();
         if (b & 0x01) DIN_H(); else DIN_L();
-        Delay_Bit();
-        CLK_H();
-        Delay_Bit();
+        Delay_Bit();            /* tSETUP ≥100ns */
+        CLK_H();                /* CLK 上升沿，芯片采样 DIN */
+        Delay_Bit();            /* tWAIT ≥1µs, PWCLK ≥400ns */
         b >>= 1;
     }
+    /* 结束时 CLK 为高，DIN 为最后一位 */
 }
 
 static void Tm_GpioInit(void)
