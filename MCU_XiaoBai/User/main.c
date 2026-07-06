@@ -76,13 +76,7 @@ int main(void)
     Bsp_Battery_Init();     /* 占位，ADC 已由 Bsp_Adc 管理 */
 
     Bsp_Tm1640_Init();
-    /* 显示一个"笑脸"位图：两个 3x3 方块作眼睛 */
-    static const uint8_t g_smile[14] = {
-        0x1C, 0x22, 0x22, 0x22, 0x1C, 0x00, 0x00,
-        0x00, 0x00, 0x1C, 0x22, 0x22, 0x22, 0x1C,
-    };
-    Bsp_Tm1640_Refresh(g_smile);
-
+ 
     /* PF3 连接状态边沿检测：断→通 触发 play=07，通→断 触发 play=08 */
     uint8_t ble_was_connected = Bsp_UartBle_IsConnected();
 
@@ -201,6 +195,12 @@ int main(void)
             line[k++]='\r'; line[k++]='\n';
             Bsp_UartAsr_SendRaw((uint8_t*)line, k);
         }
+    /* 临时全亮测试：16 个显存地址全写 0xFF，验证 TM1640 能否被点亮。
+       若全亮 -> 时序对，问题在位图/地址；若不亮 -> 时序或硬件没通。 */
+    {
+        uint8_t all_on[14] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+        Bsp_Tm1640_Refresh(all_on);
+    }
 
         Bsp_Tick_DelayMs(5);
     }
