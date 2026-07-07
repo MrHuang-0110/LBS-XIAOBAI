@@ -41,33 +41,27 @@ static const uint8_t act_voice[POWER_ACT_COUNT] = {
     ASR_VOICE_LEFT, ASR_VOICE_RIGHT,
 };
 
-/* ===== TM1640 眼睛图案（8×14 点阵）=====
-   两个 5×5 方框眼睛：行 1-5，左眼列 1-5，右眼列 8-12，左右各留 1 列空白居中。
-   方框边=0x3E(行1-5全亮)，方框内=0x22(行1+行5)。
-   闭眼=行3一条横线(0x08)。 */
+/* ===== TM1640 眼睛图案（8×14 点阵，左眼列0-6 / 右眼列7-13，各 7×8）=====
+   椭圆形眼睛轮廓（非方框），更圆润有神。
+   眨眼=行3一条横线。瞳孔=2行×1列竖条，看上方时行2-3，看中时行3-4。 */
 static const uint8_t eye_box[14] = {
-    0x00,
-    0x3E, 0x22, 0x22, 0x22, 0x3E,   /* 左眼 列1-5 */
-    0x00, 0x00,
-    0x3E, 0x22, 0x22, 0x22, 0x3E,   /* 右眼 列8-12 */
-    0x00
+    0x3C, 0x42, 0x81, 0x81, 0x81, 0x42, 0x3C,   /* 左眼 列0-6 椭圆轮廓 */
+    0x3C, 0x42, 0x81, 0x81, 0x81, 0x42, 0x3C    /* 右眼 列7-13 椭圆轮廓 */
 };
 static const uint8_t eye_closed[14] = {
-    0x00,
-    0x08, 0x08, 0x08, 0x08, 0x08,   /* 左眼闭 列1-5 行3 */
-    0x00, 0x00,
-    0x08, 0x08, 0x08, 0x08, 0x08,   /* 右眼闭 列8-12 行3 */
-    0x00
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,   /* 左眼闭 列0-6 行3 */
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08    /* 右眼闭 列7-13 行3 */
 };
 /* 眨眼帧序列：睁2s → 闭100ms → 睁150ms → 闭100ms → 睁2s（双眨后停顿）*/
 static const struct { uint16_t ms; uint8_t closed; } blink_seq[] = {
     {2000, 0}, {100, 1}, {150, 0}, {100, 1}, {2000, 0}
 };
 #define BLINK_LEN (sizeof(blink_seq)/sizeof(blink_seq[0]))
-/* 看左上/中/右上：pos 0=左上 1=中 2=右上。瞳孔行2(bit0x04)或行3(bit0x08) */
-static const uint8_t pupil_bit[3] = {0x04, 0x08, 0x04};
-static const uint8_t pupil_lc[3]  = {2, 3, 4};       /* 左眼瞳孔列 */
-static const uint8_t pupil_rc[3]  = {9, 10, 12};     /* 右眼瞳孔列 */
+/* 看左上/中/右上：pos 0=左上 1=中 2=右上。
+   瞳孔 2行×1列：上方=行2+3(bit0x0C)，中=行3+4(bit0x18) */
+static const uint8_t pupil_bit[3] = {0x0C, 0x18, 0x0C};
+static const uint8_t pupil_lc[3]  = {2, 3, 4};       /* 左眼瞳孔列(0-6内) */
+static const uint8_t pupil_rc[3]  = {9, 10, 11};     /* 右眼瞳孔列(7-13内) */
 static const struct { uint16_t ms; uint8_t pos; } look_seq[] = {
     {500, 0}, {200, 1}, {500, 2}, {200, 1}          /* 看左上 → 回中 → 看右上 → 回中 */
 };
