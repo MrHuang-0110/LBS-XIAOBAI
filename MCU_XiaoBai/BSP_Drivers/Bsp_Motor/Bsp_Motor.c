@@ -13,10 +13,9 @@
  */
 
 #define MOTOR_TIM_PERIOD  2399U    /* 48MHz / (2400) = 20 kHz */
-/* 3 档速度占空比（CCR 值）：30% / 60% / 100%
-   拉开低档比例，让三档区别明显（小电机高占空比转速趋近饱和）*/
-#define MOTOR_DUTY_30     720U     /* 2400 * 30% = 720   */
-#define MOTOR_DUTY_60     1440U    /* 2400 * 60% = 1440  */
+/* 3 档速度占空比（CCR 值）：40% / 70% / 100% */
+#define MOTOR_DUTY_40     960U     /* 2400 * 40% = 960  */
+#define MOTOR_DUTY_70     1680U    /* 2400 * 70% = 1680 */
 #define MOTOR_DUTY_100    2399U    /* 2400 * 100% = 2400，clamp 到 PERIOD */
 
 static TIM_HandleTypeDef htim3;
@@ -79,8 +78,8 @@ static void Motor_Drive(uint32_t ch_a, uint32_t ch_b, Bsp_Motor_Dir_t dir, Bsp_M
     /* 速度档位 -> CCR 值 */
     static const uint32_t duty_tbl[4] = {
         0,              /* 占位，speed 从 1 开始 */
-        MOTOR_DUTY_30,  /* MOTOR_SPEED_LOW  = 1 */
-        MOTOR_DUTY_60,  /* MOTOR_SPEED_MID  = 2 */
+        MOTOR_DUTY_40,  /* MOTOR_SPEED_LOW  = 1 */
+        MOTOR_DUTY_70,  /* MOTOR_SPEED_MID  = 2 */
         MOTOR_DUTY_100, /* MOTOR_SPEED_HIGH = 3 */
     };
     uint8_t s = (uint8_t)speed;
