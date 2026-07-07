@@ -155,21 +155,20 @@ static void SwitchMode(App_Mode_t new_mode, uint8_t play_voice)
     }
     if (play_voice) {
         Bsp_UartAsr_SendPlay(mode_voice[g_mode]);
-        Wait_VoiceDone(mode_voice[g_mode], 1000);
+        /* 不等 done，异步播报，保证按键灵敏（跟感应模式一致）*/
     }
 }
 
 /* 动力模式执行某动作：可选播报 + 电机。
- * play_voice=1（按键切动作）：先播报，等播报完毕再动电机，保证语音与动作同步。
+ * play_voice=1（按键切动作）：发播报后立即动电机，不等 done，保证按键灵敏。
  * play_voice=0（语音命令 cmd=30..34）：静默，避免用户刚说完又播报一遍。 */
 static void Power_Execute(Power_Action_t act, uint8_t play_voice)
 {
     if (act >= POWER_ACT_COUNT) return;
     g_power_action = act;
-    /* 先播报，等播报完毕再动电机，保证语音与动作同步 */
     if (play_voice) {
         Bsp_UartAsr_SendPlay(act_voice[act]);
-        Wait_VoiceDone(act_voice[act], 1000);
+        /* 不等 done，异步播报，电机立即执行 */
     }
     /* 动力模式固定 100% 速度 */
     switch (act) {
