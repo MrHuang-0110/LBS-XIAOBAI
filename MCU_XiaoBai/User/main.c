@@ -42,31 +42,21 @@ static const uint8_t act_voice[POWER_ACT_COUNT] = {
 };
 
 /* ===== TM1640 眼睛图案（8×14 点阵，左眼列0-6 / 右眼列7-13，各 7×8）=====
-   椭圆形眼睛轮廓（非方框），更圆润有神。
-   眨眼=行3一条横线。瞳孔=2行×1列竖条，看上方时行2-3，看中时行3-4。 */
+   整眼实心填充（无轮廓），眨眼=全灭。 */
 static const uint8_t eye_box[14] = {
-    0x3C, 0x42, 0x81, 0x81, 0x81, 0x42, 0x3C,   /* 左眼 列0-6 椭圆轮廓 */
-    0x3C, 0x42, 0x81, 0x81, 0x81, 0x42, 0x3C    /* 右眼 列7-13 椭圆轮廓 */
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,   /* 左眼 列0-6 实心 */
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF    /* 右眼 列7-13 实心 */
 };
-static const uint8_t eye_closed[14] = {
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,   /* 左眼闭 列0-6 行3 */
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08    /* 右眼闭 列7-13 行3 */
-};
-/* 眨眼帧序列：睁2s → 闭100ms → 睁150ms → 闭100ms → 睁2s（双眨后停顿）*/
-static const struct { uint16_t ms; uint8_t closed; } blink_seq[] = {
+/* 未连接：双眨（睁2s → 灭100ms → 睁150ms → 灭100ms → 睁2s）*/
+static const struct { uint16_t ms; uint8_t closed; } blink_idle[] = {
     {2000, 0}, {100, 1}, {150, 0}, {100, 1}, {2000, 0}
 };
-#define BLINK_LEN (sizeof(blink_seq)/sizeof(blink_seq[0]))
-/* 看左上/中/右上：pos 0=左上 1=中 2=右上。
-   瞳孔 3×3 实心方块：上方=行1-3(bit0x0E)，中=行3-5(bit0x38)。
-   pupil_lc/rc 是瞳孔起始列，叠加 3 列宽。 */
-static const uint8_t pupil_bit[3] = {0x0E, 0x38, 0x0E};
-static const uint8_t pupil_lc[3]  = {1, 2, 4};       /* 左眼瞳孔起始列(0-6内) */
-static const uint8_t pupil_rc[3]  = {8, 9, 11};      /* 右眼瞳孔起始列(7-13内) */
-static const struct { uint16_t ms; uint8_t pos; } look_seq[] = {
-    {500, 0}, {200, 1}, {500, 2}, {200, 1}          /* 看左上 → 回中 → 看右上 → 回中 */
+#define BLINK_IDLE_LEN (sizeof(blink_idle)/sizeof(blink_idle[0]))
+/* 已连接：慢眨（睁3s → 灭120ms），从容有神 */
+static const struct { uint16_t ms; uint8_t closed; } blink_active[] = {
+    {3000, 0}, {120, 1}
 };
-#define LOOK_LEN (sizeof(look_seq)/sizeof(look_seq[0]))
+#define BLINK_ACTIVE_LEN (sizeof(blink_active)/sizeof(blink_active[0]))
 
 /* ===== 全局状态 ===== */
 static App_Mode_t      g_mode;
@@ -157,9 +147,9 @@ static void Power_Execute(Power_Action_t act, uint8_t play_voice)
     }
 }
 
-/* TM1640 眼睛动画：
-   未连接 → 眨眼（睁2s → 双眨 → 睁2s，富有灵动生命力）
-   已连接 → 看左上/右上（瞳孔移动，富有AI生命力）
+/* TM1640 眼睛动画：整眼实心，眨眼区分状态。
+   未连接 → 双眨（灵动）
+   已连接 → 慢眨（从容）
    非阻塞，主循环周期调用。 */
 static void Eye_Update(void)
 {
@@ -169,46 +159,30 @@ static void Eye_Update(void)
     uint8_t connected = Bsp_UartBle_IsConnected();
     uint32_t now = Bsp_Tick_GetMs();
 
-    /* 连接状态切换时重置，立刻显示第一帧 */
+    /* 连接状态切换时重置，立刻显示睁眼 */
     if (connected != was_connected) {
         last_t = now;
         frame = 0;
         was_connected = connected;
-        if (connected) {
-            uint8_t buf[14];
-            for (int i = 0; i < 14; i++) buf[i] = eye_box[i];
-            for (int c = 0; c < 3; c++) {
-                buf[pupil_lc[0] + c] |= pupil_bit[0];
-                buf[pupil_rc[0] + c] |= pupil_bit[0];
-            }
-            Bsp_Tm1640_Refresh(buf);
-        } else {
-            Bsp_Tm1640_Refresh(eye_box);
-        }
+        Bsp_Tm1640_Refresh(eye_box);
         return;
     }
 
     if (connected) {
-        /* 看左上/右上循环 */
-        if (now - last_t >= look_seq[frame].ms) {
+        /* 慢眨：睁3s → 灭120ms */
+        if (now - last_t >= blink_active[frame].ms) {
             last_t = now;
-            frame = (uint8_t)((frame + 1) % LOOK_LEN);
-            uint8_t buf[14];
-            for (int i = 0; i < 14; i++) buf[i] = eye_box[i];
-            uint8_t p = look_seq[frame].pos;
-            for (int c = 0; c < 3; c++) {
-                buf[pupil_lc[p] + c] |= pupil_bit[p];
-                buf[pupil_rc[p] + c] |= pupil_bit[p];
-            }
-            Bsp_Tm1640_Refresh(buf);
+            frame = (uint8_t)((frame + 1) % BLINK_ACTIVE_LEN);
+            if (blink_active[frame].closed) Bsp_Tm1640_Clear();
+            else                            Bsp_Tm1640_Refresh(eye_box);
         }
     } else {
-        /* 眨眼循环 */
-        if (now - last_t >= blink_seq[frame].ms) {
+        /* 双眨：睁2s → 灭100ms → 睁150ms → 灭100ms → 睁2s */
+        if (now - last_t >= blink_idle[frame].ms) {
             last_t = now;
-            frame = (uint8_t)((frame + 1) % BLINK_LEN);
-            if (blink_seq[frame].closed) Bsp_Tm1640_Refresh(eye_closed);
-            else                         Bsp_Tm1640_Refresh(eye_box);
+            frame = (uint8_t)((frame + 1) % BLINK_IDLE_LEN);
+            if (blink_idle[frame].closed) Bsp_Tm1640_Clear();
+            else                          Bsp_Tm1640_Refresh(eye_box);
         }
     }
 }
