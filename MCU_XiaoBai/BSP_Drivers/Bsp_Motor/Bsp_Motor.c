@@ -45,7 +45,7 @@ void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef *htim)
 void Bsp_Motor_Init(void)
 {
     htim3.Instance               = TIM3;
-    htim3.Init.Prescaler         = 0;
+    htim3.Init.Prescaler         = 19;   /* 48MHz/20=2.4MHz 计数，/2400=1kHz */
     htim3.Init.CounterMode       = TIM_COUNTERMODE_UP;
     htim3.Init.Period            = MOTOR_TIM_PERIOD;
     htim3.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;
