@@ -11,7 +11,7 @@ void BSP_Init(void)
     }
 
     Bsp_LedPwm_Init();
-    Bsp_LedPwm_PlayStartupBreath();
+    /* 开机呼吸动画已移除，开机后直接 PA8 常亮 + PA9 心跳（main.c 设置）*/
 
     Bsp_Key_Init();
     Bsp_Motor_Init();
