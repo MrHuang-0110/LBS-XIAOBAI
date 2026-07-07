@@ -1,6 +1,16 @@
 #include "main.h"
 #include "Bsp.h"
 
+/* DEBUG：把 0..4095 写成 4 位十进制（前导零）到 p，返回 4。不用 sprintf。 */
+static uint16_t put_dec(char *p, uint16_t v)
+{
+    p[0] = (char)('0' + (v / 1000U));   v %= 1000U;
+    p[1] = (char)('0' + (v / 100U));    v %= 100U;
+    p[2] = (char)('0' + (v / 10U));
+    p[3] = (char)('0' + (v % 10U));
+    return 4;
+}
+
 /* ===== 模式与动作枚举 ===== */
 typedef enum {
     APP_MODE_VOICE  = 0,
@@ -411,6 +421,31 @@ int main(void)
             g_last_remote_frame != 0 &&
             (Bsp_Tick_GetMs() - g_last_remote_frame > 1000)) {
             Bsp_Motor_StopAll();
+        }
+
+        /* --- DEBUG：每 500ms 通过 ASRPRO 串口(PF0/PF1@115200)打印 4 路 ADC ---
+           USB-TTL 接 PF0(RX)/PF1(TX) 能看到 BAT/IR1/IR2/IR3 原始值。
+           调试完删除这段。 */
+        {
+            static uint32_t last_adc = 0;
+            if (Bsp_Tick_GetMs() - last_adc >= 500) {
+                last_adc = Bsp_Tick_GetMs();
+                char line[48];
+                uint16_t k = 0;
+                line[k++]='B';line[k++]='A';line[k++]='T';line[k++]='=';
+                k += put_dec(&line[k], Bsp_Adc_Read(ADC_CH_BATTERY));
+                line[k++]=' ';
+                line[k++]='I';line[k++]='R';line[k++]='1';line[k++]='=';
+                k += put_dec(&line[k], Bsp_Adc_Read(ADC_CH_IR1));
+                line[k++]=' ';
+                line[k++]='I';line[k++]='R';line[k++]='2';line[k++]='=';
+                k += put_dec(&line[k], Bsp_Adc_Read(ADC_CH_IR2));
+                line[k++]=' ';
+                line[k++]='I';line[k++]='R';line[k++]='3';line[k++]='=';
+                k += put_dec(&line[k], Bsp_Adc_Read(ADC_CH_IR3));
+                line[k++]='\r'; line[k++]='\n';
+                Bsp_UartAsr_SendRaw((uint8_t*)line, k);
+            }
         }
 
         Bsp_Tick_DelayMs(5);
