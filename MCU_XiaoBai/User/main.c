@@ -104,17 +104,6 @@ static uint32_t g_breath_t   = 0;
 
 /* ===== 统一函数 ===== */
 
-/* 节流播报：两次 play= 之间至少间隔 800ms，防止快速切动作时连续发 play=
-   把 ASRPRO 打爆导致卡死。快速切时跳过播报只执行电机。 */
-static uint32_t g_last_play = 0;
-static void App_PlayVoice(uint8_t voice_id)
-{
-    uint32_t now = Bsp_Tick_GetMs();
-    if (now - g_last_play < 800) return;   /* 间隔不够，跳过 */
-    g_last_play = now;
-    Bsp_UartAsr_SendPlay(voice_id);
-}
-
 /* 切模式：停电机 + 点 LED + 可选播报。
  * play_voice=1（按键/开机）：播报后等播报完毕再返回，保证语音与动作同步。
  * play_voice=0（语音命令 cmd=50..53）：静默，避免用户刚说完又播报一遍。 */
@@ -135,46 +124,20 @@ static void SwitchMode(App_Mode_t new_mode, uint8_t play_voice)
         g_ir3_was = 0;
     }
     if (play_voice) {
-        App_PlayVoice(mode_voice[g_mode]);
+        Bsp_UartAsr_SendPlay(mode_voice[g_mode]);
         /* 不等 done，异步播报，保证按键灵敏（跟感应模式一致）*/
     }
 }
 
-/* 动力模式执行某动作：可选播报 + 电机。
- * play_voice=1（按键切动作）：发播报后立即动电机，不等 done，保证按键灵敏。
- * play_voice=0（语音命令 cmd=30..34）：静默，避免用户刚说完又播报一遍。 */
+/* 动力模式：只设动作状态 + 可选播报。电机驱动在主循环里（跟感应模式架构一致）。
+ * play_voice=1（按键切动作）：发播报。
+ * play_voice=0（语音命令 cmd=30..34）：静默。 */
 static void Power_Execute(Power_Action_t act, uint8_t play_voice)
 {
     if (act >= POWER_ACT_COUNT) return;
     g_power_action = act;
     if (play_voice) {
-        App_PlayVoice(act_voice[act]);
-        /* 不等 done，异步播报，电机立即执行 */
-    }
-    /* 动力模式固定 100% 速度 */
-    switch (act) {
-    case POWER_ACT_STOP:
-        Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH);
-        Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH);
-        break;
-    case POWER_ACT_FWD:
-        Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
-        Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
-        break;
-    case POWER_ACT_BACK:
-        Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
-        Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
-        break;
-    case POWER_ACT_LEFT:
-        /* 坦克原地左转：左轮后退 + 右轮前进 */
-        Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
-        Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
-        break;
-    case POWER_ACT_RIGHT:
-        /* 坦克原地右转：左轮前进 + 右轮后退 */
-        Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
-        Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
-        break;
+        Bsp_UartAsr_SendPlay(act_voice[act]);
     }
 }
 
@@ -278,7 +241,7 @@ int main(void)
                         g_sensor_play = (Sensor_Play_t)((g_sensor_play + 1) % SENSOR_PLAY_COUNT);
                         Bsp_Motor_StopAll();
                         g_wave_on = 0;
-                        App_PlayVoice(sensor_voice[g_sensor_play]);
+                        Bsp_UartAsr_SendPlay(sensor_voice[g_sensor_play]);
                     } else {
                         SwitchMode(APP_MODE_SENSOR, 1);
                     }
@@ -453,6 +416,32 @@ int main(void)
                 if (g_breath_val <= 0) { g_breath_val = 0; g_breath_dir = 1; }
             }
             Bsp_LedPwm_Set(LEDPWM_2, (uint8_t)g_breath_val);
+        }
+
+        /* --- 动力模式电机驱动（主循环持续驱动，跟感应模式架构一致）--- */
+        if (g_mode == APP_MODE_POWER) {
+            switch (g_power_action) {
+            case POWER_ACT_STOP:
+                Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH);
+                Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH);
+                break;
+            case POWER_ACT_FWD:
+                Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                break;
+            case POWER_ACT_BACK:
+                Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                break;
+            case POWER_ACT_LEFT:
+                Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                break;
+            case POWER_ACT_RIGHT:
+                Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                break;
+            }
         }
 
         /* --- 感应模式执行（文档 §9）--- */
