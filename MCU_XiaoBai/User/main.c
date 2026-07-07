@@ -58,10 +58,11 @@ static const struct { uint16_t ms; uint8_t closed; } blink_seq[] = {
 };
 #define BLINK_LEN (sizeof(blink_seq)/sizeof(blink_seq[0]))
 /* 看左上/中/右上：pos 0=左上 1=中 2=右上。
-   瞳孔 2行×1列：上方=行2+3(bit0x0C)，中=行3+4(bit0x18) */
-static const uint8_t pupil_bit[3] = {0x0C, 0x18, 0x0C};
-static const uint8_t pupil_lc[3]  = {2, 3, 4};       /* 左眼瞳孔列(0-6内) */
-static const uint8_t pupil_rc[3]  = {9, 10, 11};     /* 右眼瞳孔列(7-13内) */
+   瞳孔 3×3 实心方块：上方=行1-3(bit0x0E)，中=行3-5(bit0x38)。
+   pupil_lc/rc 是瞳孔起始列，叠加 3 列宽。 */
+static const uint8_t pupil_bit[3] = {0x0E, 0x38, 0x0E};
+static const uint8_t pupil_lc[3]  = {1, 2, 4};       /* 左眼瞳孔起始列(0-6内) */
+static const uint8_t pupil_rc[3]  = {8, 9, 11};      /* 右眼瞳孔起始列(7-13内) */
 static const struct { uint16_t ms; uint8_t pos; } look_seq[] = {
     {500, 0}, {200, 1}, {500, 2}, {200, 1}          /* 看左上 → 回中 → 看右上 → 回中 */
 };
@@ -176,8 +177,10 @@ static void Eye_Update(void)
         if (connected) {
             uint8_t buf[14];
             for (int i = 0; i < 14; i++) buf[i] = eye_box[i];
-            buf[pupil_lc[0]] |= pupil_bit[0];
-            buf[pupil_rc[0]] |= pupil_bit[0];
+            for (int c = 0; c < 3; c++) {
+                buf[pupil_lc[0] + c] |= pupil_bit[0];
+                buf[pupil_rc[0] + c] |= pupil_bit[0];
+            }
             Bsp_Tm1640_Refresh(buf);
         } else {
             Bsp_Tm1640_Refresh(eye_box);
@@ -193,8 +196,10 @@ static void Eye_Update(void)
             uint8_t buf[14];
             for (int i = 0; i < 14; i++) buf[i] = eye_box[i];
             uint8_t p = look_seq[frame].pos;
-            buf[pupil_lc[p]] |= pupil_bit[p];
-            buf[pupil_rc[p]] |= pupil_bit[p];
+            for (int c = 0; c < 3; c++) {
+                buf[pupil_lc[p] + c] |= pupil_bit[p];
+                buf[pupil_rc[p] + c] |= pupil_bit[p];
+            }
             Bsp_Tm1640_Refresh(buf);
         }
     } else {
