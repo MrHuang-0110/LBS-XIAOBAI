@@ -30,6 +30,19 @@ typedef enum {
     POWER_ACT_COUNT
 } Power_Action_t;
 
+/* 感应模式的 4 个玩法（文档 §9）*/
+typedef enum {
+    SENSOR_PLAY_APPROACH   = 0,  /* 靠近启动 */
+    SENSOR_PLAY_OBSTACLE   = 1,  /* 遇障停止 */
+    SENSOR_PLAY_WAVE       = 2,  /* 挥手开关 */
+    SENSOR_PLAY_BRIGHTNESS = 3,  /* 明暗调速 */
+    SENSOR_PLAY_COUNT
+} Sensor_Play_t;
+
+/* 红外反射阈值：ADC < 2000 = 有反射（遮挡时~200，无反射~4000）。
+   方案A硬编码，量产不需要用户校准。 */
+#define IR_THRESHOLD  2000U
+
 /* 模式 -> 对应 LED（KEY-LED 一一对应，2026-07-06 变更）：
      语音->LED1 / 感应->LED2 / 遥控->LED4 / 动力->LED3
    注：Bsp_Led 枚举名 LED_MODE_POWER 实际是 LED1(PB2)，LED_MODE_VOICE 是 LED4(PA12)，
@@ -49,6 +62,11 @@ static const uint8_t mode_voice[APP_MODE_COUNT] = {
 static const uint8_t act_voice[POWER_ACT_COUNT] = {
     ASR_VOICE_STOP, ASR_VOICE_FORWARD, ASR_VOICE_BACKWARD,
     ASR_VOICE_LEFT, ASR_VOICE_RIGHT,
+};
+/* 感应玩法 -> 语音 ID（文档 §7）*/
+static const uint8_t sensor_voice[SENSOR_PLAY_COUNT] = {
+    ASR_VOICE_APPROACH_GO, ASR_VOICE_OBSTACLE_STOP,
+    ASR_VOICE_WAVE_TOGGLE, ASR_VOICE_BRIGHTNESS,
 };
 
 /* ===== TM1640 眼睛图案（8×14 点阵，左眼列0-6 / 右眼列7-13，各 7×8）=====
@@ -79,6 +97,9 @@ static const struct { uint16_t ms; uint8_t pos; } look_seq[] = {
 /* ===== 全局状态 ===== */
 static App_Mode_t      g_mode;
 static Power_Action_t  g_power_action = POWER_ACT_STOP;
+static Sensor_Play_t   g_sensor_play = SENSOR_PLAY_APPROACH;
+static uint8_t         g_wave_on = 0;            /* 挥手开关的当前开/关状态 */
+static uint8_t         g_ir1_was = 0, g_ir3_was = 0;  /* 挥手边沿检测 */
 
 /* 遥控模式状态 */
 static Bsp_Motor_Speed_t g_remote_speed = MOTOR_SPEED_MID;  /* 3 档速度，默认 2 档 70% */
@@ -119,6 +140,12 @@ static void SwitchMode(App_Mode_t new_mode, uint8_t play_voice)
     Bsp_Led_On(mode_led[g_mode]);
     if (new_mode == APP_MODE_REMOTE) {
         g_remote_speed = MOTOR_SPEED_MID;  /* 进遥控模式默认 2 档 70% */
+    }
+    if (new_mode == APP_MODE_SENSOR) {
+        g_sensor_play = SENSOR_PLAY_APPROACH;  /* 进感应模式默认玩法1 */
+        g_wave_on = 0;
+        g_ir1_was = 0;
+        g_ir3_was = 0;
     }
     if (play_voice) {
         Bsp_UartAsr_SendPlay(mode_voice[g_mode]);
@@ -259,7 +286,16 @@ int main(void)
             if (ke == KEY_EVT_SHORT) {
                 switch (kid) {
                 case KEY_ID_1: SwitchMode(APP_MODE_VOICE, 1);  break;  /* LED1 */
-                case KEY_ID_2: SwitchMode(APP_MODE_SENSOR, 1); break;  /* LED2 */
+                case KEY_ID_2:  /* LED2 感应模式：已在感应模式则切玩法 */
+                    if (g_mode == APP_MODE_SENSOR) {
+                        g_sensor_play = (Sensor_Play_t)((g_sensor_play + 1) % SENSOR_PLAY_COUNT);
+                        Bsp_Motor_StopAll();
+                        g_wave_on = 0;
+                        Bsp_UartAsr_SendPlay(sensor_voice[g_sensor_play]);
+                    } else {
+                        SwitchMode(APP_MODE_SENSOR, 1);
+                    }
+                    break;
                 case KEY_ID_3: SwitchMode(APP_MODE_REMOTE, 1); break;  /* LED3 */
                 case KEY_ID_4:  /* LED4 动力模式：已在动力模式则切动作 */
                     if (g_mode == APP_MODE_POWER) {
@@ -413,6 +449,66 @@ int main(void)
                 if (g_breath_val <= 0) { g_breath_val = 0; g_breath_dir = 1; }
             }
             Bsp_LedPwm_Set(LEDPWM_2, (uint8_t)g_breath_val);
+        }
+
+        /* --- 感应模式执行（文档 §9）--- */
+        if (g_mode == APP_MODE_SENSOR) {
+            uint16_t ir1 = Bsp_IR_ReadCh1();
+            uint16_t ir2 = Bsp_IR_ReadCh2();
+            uint16_t ir3 = Bsp_IR_ReadCh3();
+            uint8_t ir1_trig = (ir1 < IR_THRESHOLD);  /* 有反射=遮挡 */
+            uint8_t ir2_trig = (ir2 < IR_THRESHOLD);
+            uint8_t ir3_trig = (ir3 < IR_THRESHOLD);
+
+            switch (g_sensor_play) {
+            case SENSOR_PLAY_APPROACH:
+                /* 靠近启动：有物体前进，无物体停 */
+                if (ir2_trig) {
+                    Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
+                    Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
+                } else {
+                    Bsp_Motor_StopAll();
+                }
+                break;
+            case SENSOR_PLAY_OBSTACLE:
+                /* 遇障停止：前进，遇障碍停 */
+                if (ir2_trig) {
+                    Bsp_Motor_StopAll();
+                } else {
+                    Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
+                    Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
+                }
+                break;
+            case SENSOR_PLAY_WAVE:
+                /* 挥手开关：IR1/IR3 检测到靠近（下降沿）→ 切换开/关 */
+                if ((ir1_trig && !g_ir1_was) || (ir3_trig && !g_ir3_was)) {
+                    g_wave_on = !g_wave_on;
+                }
+                if (g_wave_on) {
+                    Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
+                    Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
+                } else {
+                    Bsp_Motor_StopAll();
+                }
+                break;
+            case SENSOR_PLAY_BRIGHTNESS:
+                /* 明暗调速：反射越强（值越小）速度越快 */
+                if (ir2 < 500) {
+                    Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD, MOTOR_SPEED_HIGH);
+                    Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD, MOTOR_SPEED_HIGH);
+                } else if (ir2 < 1000) {
+                    Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
+                    Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
+                } else if (ir2 < IR_THRESHOLD) {
+                    Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD, MOTOR_SPEED_LOW);
+                    Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD, MOTOR_SPEED_LOW);
+                } else {
+                    Bsp_Motor_StopAll();
+                }
+                break;
+            }
+            g_ir1_was = ir1_trig;
+            g_ir3_was = ir3_trig;
         }
 
         /* --- 遥控模式超时停机（1s 没收到帧才停，防断连电机狂转；
