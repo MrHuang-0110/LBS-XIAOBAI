@@ -42,11 +42,25 @@ static const uint8_t act_voice[POWER_ACT_COUNT] = {
 };
 
 /* ===== TM1640 眼睛图案（8×14 点阵，左眼列0-6 / 右眼列7-13，各 7×8）=====
-   整眼实心填充（无轮廓）。动效用亮度呼吸 + 眨眼。 */
+   椭圆形空心轮廓，眨眼=行3一条横线。 */
 static const uint8_t eye_box[14] = {
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,   /* 左眼 列0-6 实心 */
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF    /* 右眼 列7-13 实心 */
+    0x3C, 0x42, 0x81, 0x81, 0x81, 0x42, 0x3C,   /* 左眼 列0-6 椭圆轮廓 */
+    0x3C, 0x42, 0x81, 0x81, 0x81, 0x42, 0x3C    /* 右眼 列7-13 椭圆轮廓 */
 };
+static const uint8_t eye_closed[14] = {
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,   /* 左眼闭 列0-6 行3 */
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08    /* 右眼闭 列7-13 行3 */
+};
+/* 未连接：双眨（睁2s → 闭100ms → 睁150ms → 闭100ms → 睁2s）*/
+static const struct { uint16_t ms; uint8_t closed; } blink_idle[] = {
+    {2000, 0}, {100, 1}, {150, 0}, {100, 1}, {2000, 0}
+};
+#define BLINK_IDLE_LEN (sizeof(blink_idle)/sizeof(blink_idle[0]))
+/* 已连接：慢眨（睁3s → 闭120ms），从容有神 */
+static const struct { uint16_t ms; uint8_t closed; } blink_active[] = {
+    {3000, 0}, {120, 1}
+};
+#define BLINK_ACTIVE_LEN (sizeof(blink_active)/sizeof(blink_active[0]))
 
 /* ===== 全局状态 ===== */
 static App_Mode_t      g_mode;
@@ -137,53 +151,39 @@ static void Power_Execute(Power_Action_t act, uint8_t play_voice)
     }
 }
 
-/* TM1640 眼睛动画：整眼实心，亮度呼吸 + 眨眼。
-   未连接 → 慢呼吸（亮度 0→7→0，像待机呼吸，4 秒一周期）
-   已连接 → 常亮最亮 + 每 3s 眨一下（醒着、有神）
+/* TM1640 眼睛动画：椭圆空心轮廓 + 眨眼。
+   未连接 → 双眨（灵动）
+   已连接 → 慢眨（从容）
    非阻塞，主循环周期调用。 */
 static void Eye_Update(void)
 {
-    static uint32_t breath_t = 0;
-    static int8_t   bright = 0;        /* 0..7 亮度档 */
-    static uint8_t  dir = 1;           /* 1=变亮 0=变暗 */
-    static uint32_t blink_t = 0;
-    static uint8_t  blinking = 0;      /* 0=睁眼 1=闭眼中 */
+    static uint32_t last_t = 0;
+    static uint8_t  frame = 0;
     static uint8_t  was_connected = 0xFF;
     uint8_t connected = Bsp_UartBle_IsConnected();
     uint32_t now = Bsp_Tick_GetMs();
 
-    /* 连接状态切换时重置 */
     if (connected != was_connected) {
-        breath_t = now;
-        blink_t = now;
-        blinking = 0;
+        last_t = now;
+        frame = 0;
         was_connected = connected;
         Bsp_Tm1640_Refresh(eye_box);
-        if (connected) {
-            Bsp_Tm1640_SetBrightness(7);   /* 连接后常亮最亮 */
-        }
         return;
     }
 
     if (connected) {
-        /* 常亮 + 每 3s 眨一下（闭 120ms）*/
-        if (!blinking && (now - blink_t >= 3000)) {
-            blinking = 1;
-            blink_t = now;
-            Bsp_Tm1640_Clear();
-        } else if (blinking && (now - blink_t >= 120)) {
-            blinking = 0;
-            blink_t = now;
-            Bsp_Tm1640_Refresh(eye_box);
+        if (now - last_t >= blink_active[frame].ms) {
+            last_t = now;
+            frame = (uint8_t)((frame + 1) % BLINK_ACTIVE_LEN);
+            if (blink_active[frame].closed) Bsp_Tm1640_Refresh(eye_closed);
+            else                            Bsp_Tm1640_Refresh(eye_box);
         }
     } else {
-        /* 慢呼吸：亮度 0→7→0，每 250ms 变一档，周期 4s */
-        if (now - breath_t >= 250) {
-            breath_t = now;
-            bright += dir;
-            if (bright >= 7) { bright = 7; dir = 0 - 1; }
-            if (bright <= 0) { bright = 0; dir = 1; }
-            Bsp_Tm1640_SetBrightness((uint8_t)bright);
+        if (now - last_t >= blink_idle[frame].ms) {
+            last_t = now;
+            frame = (uint8_t)((frame + 1) % BLINK_IDLE_LEN);
+            if (blink_idle[frame].closed) Bsp_Tm1640_Refresh(eye_closed);
+            else                          Bsp_Tm1640_Refresh(eye_box);
         }
     }
 }
