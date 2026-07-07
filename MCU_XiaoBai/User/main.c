@@ -247,6 +247,7 @@ int main(void)
                         g_power_action = (Power_Action_t)((g_power_action + 1) % POWER_ACT_COUNT);
                         Bsp_Motor_StopAll();
                         Bsp_UartAsr_SendPlay(act_voice[g_power_action]);
+                        Bsp_Tick_DelayMs(1000);   /* 播报后等 1 秒再启动动作 */
                     } else {
                         SwitchMode(APP_MODE_POWER, 1);
                     }
