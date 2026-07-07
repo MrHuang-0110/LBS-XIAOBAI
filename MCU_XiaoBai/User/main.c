@@ -124,7 +124,12 @@ static void Wait_VoiceDone(uint8_t voice_id, uint32_t timeout_ms)
     while (Bsp_Tick_GetMs() - start < timeout_ms) {
         Bsp_UartAsr_Event_t e;
         if (Bsp_UartAsr_TryRecv(&e)) {
-            if (e.type == ASR_EVT_DONE && e.arg == voice_id) return;
+            if (e.type == ASR_EVT_DONE && e.arg == voice_id) {
+                /* done 比语音真正结束早一点，再加 200ms 余量
+                   确保 ASRPRO 完全播完，下一次 play= 不会撞上 */
+                Bsp_Tick_DelayMs(200);
+                return;
+            }
         }
     }
 }
