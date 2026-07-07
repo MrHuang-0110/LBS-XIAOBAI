@@ -39,9 +39,9 @@ typedef enum {
     SENSOR_PLAY_COUNT
 } Sensor_Play_t;
 
-/* 红外反射阈值：ADC < 2000 = 有反射（遮挡时~200，无反射~4000）。
+/* 红外反射阈值：ADC < 3000 = 有反射（遮挡时~200，无反射~4000）。
    方案A硬编码，量产不需要用户校准。 */
-#define IR_THRESHOLD  2000U
+#define IR_THRESHOLD  3000U
 
 /* 模式 -> 对应 LED（KEY-LED 一一对应，2026-07-06 变更）：
      语音->LED1 / 感应->LED2 / 遥控->LED4 / 动力->LED3
