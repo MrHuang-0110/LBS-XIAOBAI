@@ -129,16 +129,11 @@ static void SwitchMode(App_Mode_t new_mode, uint8_t play_voice)
     }
 }
 
-/* 动力模式：只设动作状态 + 可选播报。电机驱动在主循环里（跟感应模式架构一致）。
- * play_voice=1（按键切动作）：发播报。
- * play_voice=0（语音命令 cmd=30..34）：静默。 */
-static void Power_Execute(Power_Action_t act, uint8_t play_voice)
+/* 动力模式：只设动作状态（给语音命令 cmd=30..34 用）。电机驱动在主循环。 */
+static void Power_SetAction(Power_Action_t act)
 {
     if (act >= POWER_ACT_COUNT) return;
     g_power_action = act;
-    if (play_voice) {
-        Bsp_UartAsr_SendPlay(act_voice[act]);
-    }
 }
 
 /* TM1640 眼睛动画：椭圆空心轮廓。
@@ -249,7 +244,9 @@ int main(void)
                 case KEY_ID_3: SwitchMode(APP_MODE_REMOTE, 1); break;  /* LED3 */
                 case KEY_ID_4:  /* LED4 动力模式：已在动力模式则切动作 */
                     if (g_mode == APP_MODE_POWER) {
-                        Power_Execute((Power_Action_t)((g_power_action + 1) % POWER_ACT_COUNT), 1);
+                        g_power_action = (Power_Action_t)((g_power_action + 1) % POWER_ACT_COUNT);
+                        Bsp_Motor_StopAll();
+                        Bsp_UartAsr_SendPlay(act_voice[g_power_action]);
                     } else {
                         SwitchMode(APP_MODE_POWER, 1);
                     }
@@ -293,11 +290,11 @@ int main(void)
                         if (is_action) last_cmd_time = now;
                         switch (e.arg) {
                         /* 组合动作命令（任何模式都执行电机，静默不播报）*/
-                        case ASR_CMD_FORWARD:  Power_Execute(POWER_ACT_FWD, 0);   break;
-                        case ASR_CMD_BACKWARD: Power_Execute(POWER_ACT_BACK, 0);  break;
-                        case ASR_CMD_LEFT:     Power_Execute(POWER_ACT_LEFT, 0);  break;
-                        case ASR_CMD_RIGHT:    Power_Execute(POWER_ACT_RIGHT, 0); break;
-                        case ASR_CMD_STOP:     Power_Execute(POWER_ACT_STOP, 0);  break;
+                        case ASR_CMD_FORWARD:  Power_SetAction(POWER_ACT_FWD);   break;
+                        case ASR_CMD_BACKWARD: Power_SetAction(POWER_ACT_BACK);  break;
+                        case ASR_CMD_LEFT:     Power_SetAction(POWER_ACT_LEFT);  break;
+                        case ASR_CMD_RIGHT:    Power_SetAction(POWER_ACT_RIGHT); break;
+                        case ASR_CMD_STOP:     Power_SetAction(POWER_ACT_STOP);  break;
                         /* 单电机命令（静默执行）*/
                         case ASR_CMD_L_FWD:  Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH); break;
                         case ASR_CMD_L_REV:  Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH); break;
