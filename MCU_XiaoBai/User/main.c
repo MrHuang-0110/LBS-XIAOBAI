@@ -1,16 +1,6 @@
 #include "main.h"
 #include "Bsp.h"
 
-/* DEBUG：把 0..4095 写成 4 位十进制（前导零）到 p，返回 4。不用 sprintf。 */
-static uint16_t put_dec(char *p, uint16_t v)
-{
-    p[0] = (char)('0' + (v / 1000U));   v %= 1000U;
-    p[1] = (char)('0' + (v / 100U));    v %= 100U;
-    p[2] = (char)('0' + (v / 10U));
-    p[3] = (char)('0' + (v % 10U));
-    return 4;
-}
-
 /* ===== 模式与动作枚举 ===== */
 typedef enum {
     APP_MODE_VOICE  = 0,
@@ -113,26 +103,6 @@ static uint8_t  g_breath_dir = 1;      /* 1=上升 0=下降 */
 static uint32_t g_breath_t   = 0;
 
 /* ===== 统一函数 ===== */
-
-/* 阻塞等待 ASRPRO 播报完成（done=voice_id），超时 timeout_ms 放弃。
- * 依赖 ASRPRO 固件主动上报 done=NN\r\n；若固件不发，会等满超时才返回。
- * 阻塞期间收到的其它 ASR 事件（cmd/wake）被丢弃——按键切动作/模式场景下
- * 用户不会同时说话，可接受。 */
-static void Wait_VoiceDone(uint8_t voice_id, uint32_t timeout_ms)
-{
-    uint32_t start = Bsp_Tick_GetMs();
-    while (Bsp_Tick_GetMs() - start < timeout_ms) {
-        Bsp_UartAsr_Event_t e;
-        if (Bsp_UartAsr_TryRecv(&e)) {
-            if (e.type == ASR_EVT_DONE && e.arg == voice_id) {
-                /* done 比语音真正结束早一点，再加 200ms 余量
-                   确保 ASRPRO 完全播完，下一次 play= 不会撞上 */
-                Bsp_Tick_DelayMs(200);
-                return;
-            }
-        }
-    }
-}
 
 /* 切模式：停电机 + 点 LED + 可选播报。
  * play_voice=1（按键/开机）：播报后等播报完毕再返回，保证语音与动作同步。
