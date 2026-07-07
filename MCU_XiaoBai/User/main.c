@@ -42,17 +42,19 @@ static const uint8_t act_voice[POWER_ACT_COUNT] = {
 };
 
 /* ===== TM1640 眼睛图案（8×14 点阵）=====
-   两个 5×5 方框眼睛：行 1-5，左眼列 0-4，右眼列 9-13。
+   两个 5×5 方框眼睛：行 1-5，左眼列 1-5，右眼列 8-12，左右各留 1 列空白居中。
    方框边=0x3E(行1-5全亮)，方框内=0x22(行1+行5)。
    瞳孔=行3亮点(bit3=0x08)，转动时叠加到方框内不同列。 */
 static const uint8_t eye_box[14] = {
-    0x3E, 0x22, 0x22, 0x22, 0x3E,   /* 左眼 列0-4 */
-    0x00, 0x00, 0x00, 0x00,         /* 空列 5-8 */
-    0x3E, 0x22, 0x22, 0x22, 0x3E    /* 右眼 列9-13 */
+    0x00,                            /* 列0 空 */
+    0x3E, 0x22, 0x22, 0x22, 0x3E,   /* 左眼 列1-5 */
+    0x00, 0x00,                      /* 空列 6-7 */
+    0x3E, 0x22, 0x22, 0x22, 0x3E,   /* 右眼 列8-12 */
+    0x00                             /* 列13 空 */
 };
 /* 转动动画：瞳孔在方框内左右移动，4 帧循环 */
-static const uint8_t pupil_left_col[4]  = {1, 2, 3, 2};    /* 左眼瞳孔列 */
-static const uint8_t pupil_right_col[4] = {10, 11, 12, 11}; /* 右眼瞳孔列 */
+static const uint8_t pupil_left_col[4]  = {2, 3, 4, 3};    /* 左眼瞳孔列 */
+static const uint8_t pupil_right_col[4] = {9, 10, 11, 10}; /* 右眼瞳孔列 */
 
 /* ===== 全局状态 ===== */
 static App_Mode_t      g_mode;
