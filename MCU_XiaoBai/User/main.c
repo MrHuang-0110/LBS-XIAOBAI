@@ -41,6 +41,19 @@ static const uint8_t act_voice[POWER_ACT_COUNT] = {
     ASR_VOICE_LEFT, ASR_VOICE_RIGHT,
 };
 
+/* ===== TM1640 眼睛图案（8×14 点阵）=====
+   两个 5×5 方框眼睛：行 1-5，左眼列 0-4，右眼列 9-13。
+   方框边=0x3E(行1-5全亮)，方框内=0x22(行1+行5)。
+   瞳孔=行3亮点(bit3=0x08)，转动时叠加到方框内不同列。 */
+static const uint8_t eye_box[14] = {
+    0x3E, 0x22, 0x22, 0x22, 0x3E,   /* 左眼 列0-4 */
+    0x00, 0x00, 0x00, 0x00,         /* 空列 5-8 */
+    0x3E, 0x22, 0x22, 0x22, 0x3E    /* 右眼 列9-13 */
+};
+/* 转动动画：瞳孔在方框内左右移动，4 帧循环 */
+static const uint8_t pupil_left_col[4]  = {1, 2, 3, 2};    /* 左眼瞳孔列 */
+static const uint8_t pupil_right_col[4] = {10, 11, 12, 11}; /* 右眼瞳孔列 */
+
 /* ===== 全局状态 ===== */
 static App_Mode_t      g_mode;
 static Power_Action_t  g_power_action = POWER_ACT_STOP;
@@ -127,6 +140,47 @@ static void Power_Execute(Power_Action_t act, uint8_t play_voice)
         Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
         Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
         break;
+    }
+}
+
+/* TM1640 眼睛动画：未连遥控时慢闪（500ms 亮/灭），连接后灵动转动（瞳孔左右移）。
+   非阻塞，主循环周期调用。 */
+static void Eye_Update(void)
+{
+    static uint32_t last_t = 0;
+    static uint8_t  blink_on = 1;
+    static uint8_t  pupil_frame = 0;
+    static uint8_t  was_connected = 0;
+    uint8_t connected = Bsp_UartBle_IsConnected();
+    uint32_t now = Bsp_Tick_GetMs();
+
+    /* 连接状态切换时重置计时和帧 */
+    if (connected != was_connected) {
+        last_t = now;
+        blink_on = 1;
+        pupil_frame = 0;
+        was_connected = connected;
+    }
+
+    if (connected) {
+        /* 转动眼睛：瞳孔左右移动，每 200ms 切帧 */
+        if (now - last_t >= 200) {
+            last_t = now;
+            uint8_t buf[14];
+            for (int i = 0; i < 14; i++) buf[i] = eye_box[i];
+            buf[pupil_left_col[pupil_frame]]  |= 0x08;   /* 行3 瞳孔 */
+            buf[pupil_right_col[pupil_frame]] |= 0x08;
+            Bsp_Tm1640_Refresh(buf);
+            pupil_frame = (uint8_t)((pupil_frame + 1) % 4);
+        }
+    } else {
+        /* 慢闪：500ms 亮 / 500ms 灭 */
+        if (now - last_t >= 500) {
+            last_t = now;
+            blink_on = !blink_on;
+            if (blink_on) Bsp_Tm1640_Refresh(eye_box);
+            else          Bsp_Tm1640_Clear();
+        }
     }
 }
 
@@ -307,6 +361,9 @@ int main(void)
                 stream_len = remain;
             }
         }
+
+        /* --- TM1640 眼睛动画（未连接慢闪 / 连接后转动）--- */
+        Eye_Update();
 
         /* --- PA9 心跳呼吸灯（0→100→0 匀速，周期 2s）--- */
         if (Bsp_Tick_GetMs() - g_breath_t >= 10) {
