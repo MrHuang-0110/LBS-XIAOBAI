@@ -12,6 +12,9 @@ uint8_t Bsp_Power_Init_WaitConfirm(void);
 /** 主动关机：PA15 = 0，不返回 */
 void    Bsp_Power_ShutDown(void);
 
+/** 关机动画：4 灯反方向滚动 2 圈 + 逐个灭。阻塞约 1.5s，配合关机语播报 */
+void    Bsp_Power_ShutdownAnimation(void);
+
 /** 读 KEY1(PB3)：按下 = 1，未按 = 0 */
 uint8_t Bsp_Power_IsKey1Down(void);
 
