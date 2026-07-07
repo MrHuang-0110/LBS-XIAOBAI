@@ -152,7 +152,7 @@ void Bsp_UartAsr_Init(void)
     HAL_DMA_Init(&hdma_rx);
 
     huart.Instance          = USART2;
-    huart.Init.BaudRate     = 115200;
+    huart.Init.BaudRate     = 9600;
     huart.Init.WordLength   = UART_WORDLENGTH_8B;
     huart.Init.StopBits     = UART_STOPBITS_1;
     huart.Init.Parity       = UART_PARITY_NONE;
