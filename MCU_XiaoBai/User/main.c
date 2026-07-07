@@ -321,10 +321,11 @@ int main(void)
             Bsp_LedPwm_Set(LEDPWM_2, (uint8_t)g_breath_val);
         }
 
-        /* --- 遥控模式超时停机（200ms 没收到帧则停，防断连电机狂转）--- */
+        /* --- 遥控模式超时停机（1s 没收到帧才停，防断连电机狂转；
+               正常遥控器持续发帧间隔远小于 1s，不会误触发）--- */
         if (g_mode == APP_MODE_REMOTE &&
             g_last_remote_frame != 0 &&
-            (Bsp_Tick_GetMs() - g_last_remote_frame > 200)) {
+            (Bsp_Tick_GetMs() - g_last_remote_frame > 1000)) {
             Bsp_Motor_StopAll();
         }
 
