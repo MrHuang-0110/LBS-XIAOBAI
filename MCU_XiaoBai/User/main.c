@@ -519,32 +519,6 @@ int main(void)
             Bsp_Motor_StopAll();
         }
 
-        /* --- DEBUG：每 500ms 通过 ASRPRO 串口(PF0/PF1@115200)打印 4 路 ADC ---
-           USB-TTL 接 PF0(RX)/PF1(TX) 能看到 BAT/IR1/IR2/IR3 值。
-           BAT 显示电压 mV，IR 显示原始值。调试完删除这段。 */
-        {
-            static uint32_t last_adc = 0;
-            if (Bsp_Tick_GetMs() - last_adc >= 500) {
-                last_adc = Bsp_Tick_GetMs();
-                char line[56];
-                uint16_t k = 0;
-                line[k++]='B';line[k++]='A';line[k++]='T';line[k++]='=';
-                k += put_dec(&line[k], Bsp_Battery_ReadVoltage());
-                line[k++]='m';line[k++]='V';
-                line[k++]=' ';
-                line[k++]='I';line[k++]='R';line[k++]='1';line[k++]='=';
-                k += put_dec(&line[k], Bsp_Adc_Read(ADC_CH_IR1));
-                line[k++]=' ';
-                line[k++]='I';line[k++]='R';line[k++]='2';line[k++]='=';
-                k += put_dec(&line[k], Bsp_Adc_Read(ADC_CH_IR2));
-                line[k++]=' ';
-                line[k++]='I';line[k++]='R';line[k++]='3';line[k++]='=';
-                k += put_dec(&line[k], Bsp_Adc_Read(ADC_CH_IR3));
-                line[k++]='\r'; line[k++]='\n';
-                Bsp_UartAsr_SendRaw((uint8_t*)line, k);
-            }
-        }
-
         /* --- 低电量检测：低于 3.3V 时每 30 秒播报一次 --- */
         {
             static uint32_t last_low = 0;
