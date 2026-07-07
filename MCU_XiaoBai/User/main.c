@@ -104,6 +104,17 @@ static uint32_t g_breath_t   = 0;
 
 /* ===== 统一函数 ===== */
 
+/* 节流播报：两次 play= 之间至少间隔 800ms，防止快速切动作时连续发 play=
+   把 ASRPRO 打爆导致卡死。快速切时跳过播报只执行电机。 */
+static uint32_t g_last_play = 0;
+static void App_PlayVoice(uint8_t voice_id)
+{
+    uint32_t now = Bsp_Tick_GetMs();
+    if (now - g_last_play < 800) return;   /* 间隔不够，跳过 */
+    g_last_play = now;
+    Bsp_UartAsr_SendPlay(voice_id);
+}
+
 /* 切模式：停电机 + 点 LED + 可选播报。
  * play_voice=1（按键/开机）：播报后等播报完毕再返回，保证语音与动作同步。
  * play_voice=0（语音命令 cmd=50..53）：静默，避免用户刚说完又播报一遍。 */
@@ -124,7 +135,7 @@ static void SwitchMode(App_Mode_t new_mode, uint8_t play_voice)
         g_ir3_was = 0;
     }
     if (play_voice) {
-        Bsp_UartAsr_SendPlay(mode_voice[g_mode]);
+        App_PlayVoice(mode_voice[g_mode]);
         /* 不等 done，异步播报，保证按键灵敏（跟感应模式一致）*/
     }
 }
@@ -137,7 +148,7 @@ static void Power_Execute(Power_Action_t act, uint8_t play_voice)
     if (act >= POWER_ACT_COUNT) return;
     g_power_action = act;
     if (play_voice) {
-        Bsp_UartAsr_SendPlay(act_voice[act]);
+        App_PlayVoice(act_voice[act]);
         /* 不等 done，异步播报，电机立即执行 */
     }
     /* 动力模式固定 100% 速度 */
@@ -267,7 +278,7 @@ int main(void)
                         g_sensor_play = (Sensor_Play_t)((g_sensor_play + 1) % SENSOR_PLAY_COUNT);
                         Bsp_Motor_StopAll();
                         g_wave_on = 0;
-                        Bsp_UartAsr_SendPlay(sensor_voice[g_sensor_play]);
+                        App_PlayVoice(sensor_voice[g_sensor_play]);
                     } else {
                         SwitchMode(APP_MODE_SENSOR, 1);
                     }
