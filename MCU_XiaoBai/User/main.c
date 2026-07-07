@@ -150,7 +150,7 @@ static void SwitchMode(App_Mode_t new_mode, uint8_t play_voice)
     }
     if (play_voice) {
         Bsp_UartAsr_SendPlay(mode_voice[g_mode]);
-        Wait_VoiceDone(mode_voice[g_mode], 500);
+        Wait_VoiceDone(mode_voice[g_mode], 1000);
     }
 }
 
@@ -164,7 +164,7 @@ static void Power_Execute(Power_Action_t act, uint8_t play_voice)
     /* 先播报，等播报完毕再动电机，保证语音与动作同步 */
     if (play_voice) {
         Bsp_UartAsr_SendPlay(act_voice[act]);
-        Wait_VoiceDone(act_voice[act], 500);
+        Wait_VoiceDone(act_voice[act], 1000);
     }
     /* 动力模式固定 100% 速度 */
     switch (act) {
