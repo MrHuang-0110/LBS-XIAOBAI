@@ -44,17 +44,34 @@ static const uint8_t act_voice[POWER_ACT_COUNT] = {
 /* ===== TM1640 眼睛图案（8×14 点阵）=====
    两个 5×5 方框眼睛：行 1-5，左眼列 1-5，右眼列 8-12，左右各留 1 列空白居中。
    方框边=0x3E(行1-5全亮)，方框内=0x22(行1+行5)。
-   瞳孔=行3亮点(bit3=0x08)，转动时叠加到方框内不同列。 */
+   闭眼=行3一条横线(0x08)。 */
 static const uint8_t eye_box[14] = {
-    0x00,                            /* 列0 空 */
+    0x00,
     0x3E, 0x22, 0x22, 0x22, 0x3E,   /* 左眼 列1-5 */
-    0x00, 0x00,                      /* 空列 6-7 */
+    0x00, 0x00,
     0x3E, 0x22, 0x22, 0x22, 0x3E,   /* 右眼 列8-12 */
-    0x00                             /* 列13 空 */
+    0x00
 };
-/* 转动动画：瞳孔在方框内左右移动，4 帧循环 */
-static const uint8_t pupil_left_col[4]  = {2, 3, 4, 3};    /* 左眼瞳孔列 */
-static const uint8_t pupil_right_col[4] = {9, 10, 11, 10}; /* 右眼瞳孔列 */
+static const uint8_t eye_closed[14] = {
+    0x00,
+    0x08, 0x08, 0x08, 0x08, 0x08,   /* 左眼闭 列1-5 行3 */
+    0x00, 0x00,
+    0x08, 0x08, 0x08, 0x08, 0x08,   /* 右眼闭 列8-12 行3 */
+    0x00
+};
+/* 眨眼帧序列：睁2s → 闭100ms → 睁150ms → 闭100ms → 睁2s（双眨后停顿）*/
+static const struct { uint16_t ms; uint8_t closed; } blink_seq[] = {
+    {2000, 0}, {100, 1}, {150, 0}, {100, 1}, {2000, 0}
+};
+#define BLINK_LEN (sizeof(blink_seq)/sizeof(blink_seq[0]))
+/* 看左上/中/右上：pos 0=左上 1=中 2=右上。瞳孔行2(bit0x04)或行3(bit0x08) */
+static const uint8_t pupil_bit[3] = {0x04, 0x08, 0x04};
+static const uint8_t pupil_lc[3]  = {2, 3, 4};       /* 左眼瞳孔列 */
+static const uint8_t pupil_rc[3]  = {9, 10, 12};     /* 右眼瞳孔列 */
+static const struct { uint16_t ms; uint8_t pos; } look_seq[] = {
+    {500, 0}, {200, 1}, {500, 2}, {200, 1}          /* 看左上 → 回中 → 看右上 → 回中 */
+};
+#define LOOK_LEN (sizeof(look_seq)/sizeof(look_seq[0]))
 
 /* ===== 全局状态 ===== */
 static App_Mode_t      g_mode;
@@ -145,43 +162,54 @@ static void Power_Execute(Power_Action_t act, uint8_t play_voice)
     }
 }
 
-/* TM1640 眼睛动画：未连遥控时慢闪（500ms 亮/灭），连接后灵动转动（瞳孔左右移）。
+/* TM1640 眼睛动画：
+   未连接 → 眨眼（睁2s → 双眨 → 睁2s，富有灵动生命力）
+   已连接 → 看左上/右上（瞳孔移动，富有AI生命力）
    非阻塞，主循环周期调用。 */
 static void Eye_Update(void)
 {
     static uint32_t last_t = 0;
-    static uint8_t  blink_on = 1;
-    static uint8_t  pupil_frame = 0;
-    static uint8_t  was_connected = 0;
+    static uint8_t  frame = 0;
+    static uint8_t  was_connected = 0xFF;   /* 初始非法值，触发首帧显示 */
     uint8_t connected = Bsp_UartBle_IsConnected();
     uint32_t now = Bsp_Tick_GetMs();
 
-    /* 连接状态切换时重置计时和帧 */
+    /* 连接状态切换时重置，立刻显示第一帧 */
     if (connected != was_connected) {
         last_t = now;
-        blink_on = 1;
-        pupil_frame = 0;
+        frame = 0;
         was_connected = connected;
+        if (connected) {
+            uint8_t buf[14];
+            for (int i = 0; i < 14; i++) buf[i] = eye_box[i];
+            buf[pupil_lc[0]] |= pupil_bit[0];
+            buf[pupil_rc[0]] |= pupil_bit[0];
+            Bsp_Tm1640_Refresh(buf);
+        } else {
+            Bsp_Tm1640_Refresh(eye_box);
+        }
+        return;
     }
 
     if (connected) {
-        /* 转动眼睛：瞳孔左右移动，每 200ms 切帧 */
-        if (now - last_t >= 200) {
+        /* 看左上/右上循环 */
+        if (now - last_t >= look_seq[frame].ms) {
             last_t = now;
+            frame = (uint8_t)((frame + 1) % LOOK_LEN);
             uint8_t buf[14];
             for (int i = 0; i < 14; i++) buf[i] = eye_box[i];
-            buf[pupil_left_col[pupil_frame]]  |= 0x08;   /* 行3 瞳孔 */
-            buf[pupil_right_col[pupil_frame]] |= 0x08;
+            uint8_t p = look_seq[frame].pos;
+            buf[pupil_lc[p]] |= pupil_bit[p];
+            buf[pupil_rc[p]] |= pupil_bit[p];
             Bsp_Tm1640_Refresh(buf);
-            pupil_frame = (uint8_t)((pupil_frame + 1) % 4);
         }
     } else {
-        /* 慢闪：500ms 亮 / 500ms 灭 */
-        if (now - last_t >= 500) {
+        /* 眨眼循环 */
+        if (now - last_t >= blink_seq[frame].ms) {
             last_t = now;
-            blink_on = !blink_on;
-            if (blink_on) Bsp_Tm1640_Refresh(eye_box);
-            else          Bsp_Tm1640_Clear();
+            frame = (uint8_t)((frame + 1) % BLINK_LEN);
+            if (blink_seq[frame].closed) Bsp_Tm1640_Refresh(eye_closed);
+            else                         Bsp_Tm1640_Refresh(eye_box);
         }
     }
 }
