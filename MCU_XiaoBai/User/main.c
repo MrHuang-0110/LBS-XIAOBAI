@@ -90,6 +90,7 @@ static Power_Action_t  g_power_action = POWER_ACT_STOP;
 static Sensor_Play_t   g_sensor_play = SENSOR_PLAY_APPROACH;
 static uint8_t         g_wave_on = 0;            /* 挥手开关的当前开/关状态 */
 static uint8_t         g_ir1_was = 0, g_ir3_was = 0;  /* 挥手边沿检测 */
+static uint8_t         g_mode_paused = 0;        /* 1=进入模式后暂停，第二次按键才启动 */
 
 /* 遥控模式状态 */
 static Bsp_Motor_Speed_t g_remote_speed = MOTOR_SPEED_MID;  /* 3 档速度，默认 2 档 70% */
@@ -122,6 +123,9 @@ static void SwitchMode(App_Mode_t new_mode, uint8_t play_voice)
         g_wave_on = 0;
         g_ir1_was = 0;
         g_ir3_was = 0;
+    }
+    if (new_mode == APP_MODE_POWER || new_mode == APP_MODE_SENSOR) {
+        g_mode_paused = 1;   /* 进入模式后暂停，第二次按键才启动 */
     }
     if (play_voice) {
         Bsp_UartAsr_SendPlay(mode_voice[g_mode]);
@@ -233,10 +237,15 @@ int main(void)
                 case KEY_ID_1: SwitchMode(APP_MODE_VOICE, 1);  break;  /* LED1 */
                 case KEY_ID_2:  /* LED2 感应模式：已在感应模式则切玩法 */
                     if (g_mode == APP_MODE_SENSOR) {
-                        g_sensor_play = (Sensor_Play_t)((g_sensor_play + 1) % SENSOR_PLAY_COUNT);
-                        Bsp_Motor_StopAll();
-                        g_wave_on = 0;
-                        Bsp_UartAsr_SendPlay(sensor_voice[g_sensor_play]);
+                        if (g_mode_paused) {
+                            g_mode_paused = 0;   /* 第一次按键：启动第一个玩法 */
+                            Bsp_UartAsr_SendPlay(sensor_voice[g_sensor_play]);
+                        } else {
+                            g_sensor_play = (Sensor_Play_t)((g_sensor_play + 1) % SENSOR_PLAY_COUNT);
+                            Bsp_Motor_StopAll();
+                            g_wave_on = 0;
+                            Bsp_UartAsr_SendPlay(sensor_voice[g_sensor_play]);
+                        }
                     } else {
                         SwitchMode(APP_MODE_SENSOR, 1);
                     }
@@ -244,7 +253,12 @@ int main(void)
                 case KEY_ID_3: SwitchMode(APP_MODE_REMOTE, 1); break;  /* LED3 */
                 case KEY_ID_4:  /* LED4 动力模式：已在动力模式则切动作 */
                     if (g_mode == APP_MODE_POWER) {
-                        g_power_action = (Power_Action_t)((g_power_action + 1) % POWER_ACT_COUNT);
+                        if (g_mode_paused) {
+                            g_mode_paused = 0;                       /* 第一次按键：启动 */
+                            g_power_action = POWER_ACT_FWD;          /* 从前进开始 */
+                        } else {
+                            g_power_action = (Power_Action_t)((g_power_action + 1) % POWER_ACT_COUNT);
+                        }
                         Bsp_Motor_StopAll();
                         Bsp_UartAsr_SendPlay(act_voice[g_power_action]);
                         Bsp_Tick_DelayMs(500);   /* 播报后等 500ms 再启动动作 */
@@ -417,7 +431,7 @@ int main(void)
         }
 
         /* --- 动力模式电机驱动（主循环持续驱动，跟感应模式架构一致）--- */
-        if (g_mode == APP_MODE_POWER) {
+        if (g_mode == APP_MODE_POWER && !g_mode_paused) {
             switch (g_power_action) {
             case POWER_ACT_STOP:
                 Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH);
@@ -443,7 +457,7 @@ int main(void)
         }
 
         /* --- 感应模式执行（文档 §9）--- */
-        if (g_mode == APP_MODE_SENSOR) {
+        if (g_mode == APP_MODE_SENSOR && !g_mode_paused) {
             uint16_t ir1 = Bsp_IR_ReadCh1();
             uint16_t ir2 = Bsp_IR_ReadCh2();
             uint16_t ir3 = Bsp_IR_ReadCh3();
