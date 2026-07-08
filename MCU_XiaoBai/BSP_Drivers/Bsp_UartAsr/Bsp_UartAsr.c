@@ -176,7 +176,7 @@ void Bsp_UartAsr_Init(void)
 
 static void SendStr(const char *s, uint16_t len)
 {
-    HAL_UART_Transmit(&huart, (uint8_t *)s, len, 20);
+    HAL_UART_Transmit(&huart, (uint8_t *)s, len, 1000);
 }
 
 void Bsp_UartAsr_SendPlay(uint8_t voice_id)
@@ -188,6 +188,8 @@ void Bsp_UartAsr_SendPlay(uint8_t voice_id)
     buf[5] = (char)('0' + (voice_id / 10U));
     buf[6] = (char)('0' + (voice_id % 10U));
     SendStr(buf, 7);
+	  extern void     Bsp_Tick_DelayMs(uint32_t ms);
+	  Bsp_Tick_DelayMs(500);   /* 播报后等 500ms 再启动动作 */
 }
 
 void Bsp_UartAsr_SendStop(void) { SendStr("stop", 4); }

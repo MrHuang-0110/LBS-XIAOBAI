@@ -34,7 +34,10 @@ void Bsp_Key_Init(void)
 
     GPIO_InitTypeDef gi = {0};
     gi.Mode  = GPIO_MODE_INPUT;
-    gi.Pull  = GPIO_NOPULL;
+    /* 按键 active-low（按下接地），必须上拉维持松开时的高电平。
+     * NOPULL 会让引脚悬空高阻，电机启动的地弹/EMI 能直接把电平拉低
+     * 超过 20ms 防抖窗口，触发假短按（实测：发 cmd=30 启动电机后 KEY1 误触发）。 */
+    gi.Pull  = GPIO_PULLUP;
     gi.Speed = GPIO_SPEED_FREQ_LOW;
     gi.Pin   = GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_8;
     HAL_GPIO_Init(GPIOB, &gi);
