@@ -88,25 +88,14 @@ void Bsp_Power_ShutDown(void)
 
 void Bsp_Power_ShutdownAnimation(void)
 {
-    /* 关机动画（开机动画的反向）：
-       1. 4 灯反方向滚动 2 圈（LED4→LED3→LED2→LED1）
-       2. 4 灯全亮后逐个灭（LED1→LED2→LED3→LED4） */
-    for (uint8_t round = 0; round < 2; round++) {
-        for (int8_t i = LED_MODE_COUNT - 1; i >= 0; i--) {
-            Bsp_Led_AllOff();
-            Bsp_Led_On((Bsp_Led_Id_t)i);
-            Bsp_Tick_DelayMs(80);
-        }
-    }
-    /* 全亮一下再逐个灭 */
+    /* 关机动画（开机逐个亮的反向）：4 灯全亮 -> 逐个灭，每 500ms，总 2s */
     Bsp_Led_On(LED_MODE_POWER);
     Bsp_Led_On(LED_MODE_SENSOR);
     Bsp_Led_On(LED_MODE_REMOTE);
     Bsp_Led_On(LED_MODE_VOICE);
-    Bsp_Tick_DelayMs(150);
-    Bsp_Led_Off(LED_MODE_POWER);   Bsp_Tick_DelayMs(150);
-    Bsp_Led_Off(LED_MODE_SENSOR);  Bsp_Tick_DelayMs(150);
-    Bsp_Led_Off(LED_MODE_REMOTE);  Bsp_Tick_DelayMs(150);
-    Bsp_Led_Off(LED_MODE_VOICE);   Bsp_Tick_DelayMs(150);
-    Bsp_Led_AllOff();
+    Bsp_Tick_DelayMs(500);
+    Bsp_Led_Off(LED_MODE_POWER);   Bsp_Tick_DelayMs(500);
+    Bsp_Led_Off(LED_MODE_SENSOR);  Bsp_Tick_DelayMs(500);
+    Bsp_Led_Off(LED_MODE_REMOTE);  Bsp_Tick_DelayMs(500);
+    Bsp_Led_Off(LED_MODE_VOICE);   Bsp_Tick_DelayMs(500);
 }

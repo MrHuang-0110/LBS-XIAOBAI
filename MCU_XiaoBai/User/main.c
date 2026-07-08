@@ -267,10 +267,11 @@ int main(void)
                 /* === 关机流程 === */
                 Bsp_Motor_StopAll();
                 Bsp_UartAsr_SendPlay(ASR_VOICE_SHUTDOWN);
-                Bsp_Power_ShutdownAnimation();   /* 关机动画 ~1.5s，期间语音播完 */
+                Bsp_Power_ShutdownAnimation();   /* 关机动画：4灯逐个灭，2s */
                 Bsp_LedPwm_Set(LEDPWM_1, 0);
                 Bsp_LedPwm_Set(LEDPWM_2, 0);
                 Bsp_Tm1640_Clear();
+                Bsp_Tick_DelayMs(1000);          /* 断电前延时 1 秒 */
                 Bsp_Power_ShutDown();
             }
         }
