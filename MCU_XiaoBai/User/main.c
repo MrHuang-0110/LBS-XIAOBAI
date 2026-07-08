@@ -281,63 +281,59 @@ int main(void)
             Bsp_UartAsr_Event_t e;
             if (Bsp_UartAsr_TryRecv(&e)) {
                 if (e.type == ASR_EVT_CMD) {
-                    /* cmd=01：启动呼吸灯 */
+                    /* cmd=01：启动呼吸灯（任何模式）*/
                     if (e.arg == 1) {
                         g_breathing = 1;
                         g_breath_val = 0;
                         g_breath_dir = 1;
                         g_breath_t = Bsp_Tick_GetMs();
                     }
-                    else {
-                    /* 动作类命令（30..34）+ 单电机命令（40..45）800ms 防抖，
-                       防 ASRPRO 误识别连续发导致抖动；
-                       模式切换命令（50..53）不防抖。 */
-                    uint8_t is_action = (e.arg >= ASR_CMD_FORWARD && e.arg <= ASR_CMD_R_STOP);
-                    uint32_t now = Bsp_Tick_GetMs();
-                    if (is_action && (now - last_cmd_time < 800)) {
-                        /* 忽略 */
-                    } else {
-                        if (is_action) last_cmd_time = now;
+                    /* 模式切换命令 50..53：任何模式都响应 */
+                    else if (e.arg >= ASR_CMD_ENTER_POWER && e.arg <= ASR_CMD_ENTER_VOICE) {
                         switch (e.arg) {
-                        /* 组合动作命令（直接驱动电机 + 播报）*/
-                        case ASR_CMD_FORWARD:
-                            Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
-                            Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
-                             
-                            break;
-                        case ASR_CMD_BACKWARD:
-                            Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
-                            Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
-                            
-                            break;
-                        case ASR_CMD_LEFT:
-                            Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
-                            Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
-                             
-                            break;
-                        case ASR_CMD_RIGHT:
-                            Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
-                            Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
-                             
-                            break;
-                        case ASR_CMD_STOP:
-                            Bsp_Motor_StopAll();
-                            break;
-                        /* 单电机命令（直接驱动）*/
-                        case ASR_CMD_L_FWD:  Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH); break;
-                        case ASR_CMD_L_REV:  Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH); break;
-                        case ASR_CMD_L_STOP: Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH); break;
-                        case ASR_CMD_R_FWD:  Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH); break;
-                        case ASR_CMD_R_REV:  Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH); break;
-                        case ASR_CMD_R_STOP: Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH); break;
-                        /* 模式切换命令 */
                         case ASR_CMD_ENTER_POWER:  SwitchMode(APP_MODE_POWER, 0);  break;
                         case ASR_CMD_ENTER_SENSOR: SwitchMode(APP_MODE_SENSOR, 0); break;
                         case ASR_CMD_ENTER_REMOTE: SwitchMode(APP_MODE_REMOTE, 0); break;
                         case ASR_CMD_ENTER_VOICE:  SwitchMode(APP_MODE_VOICE, 0);  break;
-                        default: break;
                         }
                     }
+                    /* 电机控制命令 30..45：只在语音模式执行 */
+                    else if (g_mode == APP_MODE_VOICE) {
+                        uint8_t is_action = (e.arg >= ASR_CMD_FORWARD && e.arg <= ASR_CMD_R_STOP);
+                        uint32_t now = Bsp_Tick_GetMs();
+                        if (is_action && (now - last_cmd_time < 800)) {
+                            /* 防抖忽略 */
+                        } else {
+                            if (is_action) last_cmd_time = now;
+                            switch (e.arg) {
+                            case ASR_CMD_FORWARD:
+                                Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                                Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                                break;
+                            case ASR_CMD_BACKWARD:
+                                Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                                Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                                break;
+                            case ASR_CMD_LEFT:
+                                Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                                Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                                break;
+                            case ASR_CMD_RIGHT:
+                                Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                                Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                                break;
+                            case ASR_CMD_STOP:
+                                Bsp_Motor_StopAll();
+                                break;
+                            case ASR_CMD_L_FWD:  Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH); break;
+                            case ASR_CMD_L_REV:  Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH); break;
+                            case ASR_CMD_L_STOP: Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH); break;
+                            case ASR_CMD_R_FWD:  Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH); break;
+                            case ASR_CMD_R_REV:  Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH); break;
+                            case ASR_CMD_R_STOP: Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH); break;
+                            default: break;
+                            }
+                        }
                     }
                 }
                 else if (e.type == ASR_EVT_WAKE) {
