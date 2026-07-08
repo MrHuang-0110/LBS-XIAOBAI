@@ -89,7 +89,7 @@ static App_Mode_t      g_mode;
 static Power_Action_t  g_power_action = POWER_ACT_STOP;
 static Sensor_Play_t   g_sensor_play = SENSOR_PLAY_APPROACH;
 static uint8_t         g_wave_on = 0;            /* 挥手开关的当前开/关状态 */
-static uint8_t         g_ir1_was = 0, g_ir3_was = 0;  /* 挥手边沿检测 */
+static uint8_t         g_ir1_was = 0, g_ir2_was = 0, g_ir3_was = 0;  /* 挥手边沿检测 */
 static uint8_t         g_mode_paused = 0;        /* 1=进入模式后暂停，第二次按键才启动 */
 
 /* 遥控模式状态 */
@@ -485,9 +485,16 @@ int main(void)
                 }
                 break;
             case SENSOR_PLAY_WAVE:
-                /* 挥手开关：IR1/IR3 检测到靠近（下降沿）→ 切换开/关 */
-                if ((ir1_trig && !g_ir1_was) || (ir3_trig && !g_ir3_was)) {
-                    g_wave_on = !g_wave_on;
+                /* 挥手开关：IR1/IR2/IR3 任一检测到手（下降沿）→ 切换，500ms 消抖 */
+                {
+                    static uint32_t last_wave = 0;
+                    uint8_t any_edge = (ir1_trig && !g_ir1_was) ||
+                                       (ir2_trig && !g_ir2_was) ||
+                                       (ir3_trig && !g_ir3_was);
+                    if (any_edge && (Bsp_Tick_GetMs() - last_wave > 500)) {
+                        g_wave_on = !g_wave_on;
+                        last_wave = Bsp_Tick_GetMs();
+                    }
                 }
                 if (g_wave_on) {
                     Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
@@ -513,6 +520,7 @@ int main(void)
                 break;
             }
             g_ir1_was = ir1_trig;
+            g_ir2_was = ir2_trig;
             g_ir3_was = ir3_trig;
         }
 
