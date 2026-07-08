@@ -133,12 +133,6 @@ static void SwitchMode(App_Mode_t new_mode, uint8_t play_voice)
     }
 }
 
-/* 动力模式：只设动作状态（给语音命令 cmd=30..34 用）。电机驱动在主循环。 */
-static void Power_SetAction(Power_Action_t act)
-{
-    if (act >= POWER_ACT_COUNT) return;
-    g_power_action = act;
-}
 
 /* TM1640 眼睛动画：椭圆空心轮廓。
    未连接 → 双眨（灵动）
@@ -261,7 +255,7 @@ int main(void)
                         }
                         Bsp_Motor_StopAll();
                         Bsp_UartAsr_SendPlay(act_voice[g_power_action]);
-                        Bsp_Tick_DelayMs(500);   /* 播报后等 500ms 再启动动作 */
+                         
                     } else {
                         SwitchMode(APP_MODE_POWER, 1);
                     }
@@ -305,11 +299,26 @@ int main(void)
                         if (is_action) last_cmd_time = now;
                         switch (e.arg) {
                         /* 组合动作命令（任何模式都执行电机，静默不播报）*/
-                        case ASR_CMD_FORWARD:  Power_SetAction(POWER_ACT_FWD);   break;
-                        case ASR_CMD_BACKWARD: Power_SetAction(POWER_ACT_BACK);  break;
-                        case ASR_CMD_LEFT:     Power_SetAction(POWER_ACT_LEFT);  break;
-                        case ASR_CMD_RIGHT:    Power_SetAction(POWER_ACT_RIGHT); break;
-                        case ASR_CMD_STOP:     Power_SetAction(POWER_ACT_STOP);  break;
+                        /* 组合动作命令（直接驱动电机，任何模式都响应）*/
+                        case ASR_CMD_FORWARD:
+                            Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                            Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                            break;
+                        case ASR_CMD_BACKWARD:
+                            Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                            Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                            break;
+                        case ASR_CMD_LEFT:
+                            Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                            Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                            break;
+                        case ASR_CMD_RIGHT:
+                            Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                            Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                            break;
+                        case ASR_CMD_STOP:
+                            Bsp_Motor_StopAll();
+                            break;
                         /* 单电机命令（静默执行）*/
                         case ASR_CMD_L_FWD:  Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH); break;
                         case ASR_CMD_L_REV:  Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH); break;
