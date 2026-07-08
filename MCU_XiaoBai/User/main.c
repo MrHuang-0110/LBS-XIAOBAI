@@ -298,34 +298,38 @@ int main(void)
                     } else {
                         if (is_action) last_cmd_time = now;
                         switch (e.arg) {
-                        /* 组合动作命令（任何模式都执行电机，静默不播报）*/
-                        /* 组合动作命令（直接驱动电机，任何模式都响应）*/
+                        /* 组合动作命令（直接驱动电机 + 播报）*/
                         case ASR_CMD_FORWARD:
                             Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
                             Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                            Bsp_UartAsr_SendPlay(ASR_VOICE_FORWARD);
                             break;
                         case ASR_CMD_BACKWARD:
                             Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
                             Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                            Bsp_UartAsr_SendPlay(ASR_VOICE_BACKWARD);
                             break;
                         case ASR_CMD_LEFT:
                             Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
                             Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                            Bsp_UartAsr_SendPlay(ASR_VOICE_LEFT);
                             break;
                         case ASR_CMD_RIGHT:
                             Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
                             Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                            Bsp_UartAsr_SendPlay(ASR_VOICE_RIGHT);
                             break;
                         case ASR_CMD_STOP:
                             Bsp_Motor_StopAll();
+                            Bsp_UartAsr_SendPlay(ASR_VOICE_STOP);
                             break;
-                        /* 单电机命令（静默执行）*/
-                        case ASR_CMD_L_FWD:  Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH); break;
-                        case ASR_CMD_L_REV:  Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH); break;
-                        case ASR_CMD_L_STOP: Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH); break;
-                        case ASR_CMD_R_FWD:  Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH); break;
-                        case ASR_CMD_R_REV:  Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH); break;
-                        case ASR_CMD_R_STOP: Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH); break;
+                        /* 单电机命令（直接驱动 + 播报 play=28..33）*/
+                        case ASR_CMD_L_FWD:  Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH); Bsp_UartAsr_SendPlay(28); break;
+                        case ASR_CMD_L_REV:  Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH); Bsp_UartAsr_SendPlay(29); break;
+                        case ASR_CMD_L_STOP: Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH); Bsp_UartAsr_SendPlay(30); break;
+                        case ASR_CMD_R_FWD:  Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH); Bsp_UartAsr_SendPlay(31); break;
+                        case ASR_CMD_R_REV:  Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH); Bsp_UartAsr_SendPlay(32); break;
+                        case ASR_CMD_R_STOP: Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH); Bsp_UartAsr_SendPlay(33); break;
                         /* 模式切换命令 */
                         case ASR_CMD_ENTER_POWER:  SwitchMode(APP_MODE_POWER, 0);  break;
                         case ASR_CMD_ENTER_SENSOR: SwitchMode(APP_MODE_SENSOR, 0); break;
