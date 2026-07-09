@@ -181,19 +181,20 @@ static void SendStr(const char *s, uint16_t len)
 
 void Bsp_UartAsr_SendPlay(uint8_t voice_id)
 {
-    /* "play=NN"（voice_id 都在 1..99 之间，2 位十进制补零） */
+    /* "play=NN\n"（voice_id 1..99，2 位十进制补零，帧尾 \n）*/
     if (voice_id > 99U) voice_id = 99U;
-    char buf[7];
+    char buf[8];
     buf[0] = 'p'; buf[1] = 'l'; buf[2] = 'a'; buf[3] = 'y'; buf[4] = '=';
     buf[5] = (char)('0' + (voice_id / 10U));
     buf[6] = (char)('0' + (voice_id % 10U));
-    SendStr(buf, 7);
-	  extern void     Bsp_Tick_DelayMs(uint32_t ms);
-	  Bsp_Tick_DelayMs(500);   /* 播报后等 500ms 再启动动作 */
+    buf[7] = '\n';
+    SendStr(buf, 8);
+    /* v0.6：删除原 DelayMs(500)。语音侧已按行确定性分帧，不再需要人为静默间隔；
+       播报与动作天然异步，主循环不再冻结。 */
 }
 
-void Bsp_UartAsr_SendStop(void) { SendStr("stop", 4); }
-void Bsp_UartAsr_SendPing(void) { SendStr("ping", 4); }
+void Bsp_UartAsr_SendStop(void) { SendStr("stop\n", 5); }
+void Bsp_UartAsr_SendPing(void) { SendStr("ping\n", 5); }
 
 void Bsp_UartAsr_SendRaw(const uint8_t *data, uint16_t len)
 {
