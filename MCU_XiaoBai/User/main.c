@@ -97,11 +97,12 @@ static Bsp_Motor_Speed_t g_remote_speed = MOTOR_SPEED_MID;  /* 3 档速度，默
 static uint32_t          g_last_remote_frame = 0;           /* 超时停机计时 */
 static uint8_t           g_r1_was = 0, g_l1_was = 0;        /* 肩键边沿检测 */
 
-/* 呼吸灯状态（PA9，由 cmd=01 启动 / done=01 关闭） */
+/* 呼吸灯状态（PA9，由 wake 唤醒启动，15s 超时自动关闭） */
 static uint8_t  g_breathing = 0;       /* 1=呼吸中 0=关闭 */
 static int16_t  g_breath_val = 0;
 static uint8_t  g_breath_dir = 1;      /* 1=上升 0=下降 */
-static uint32_t g_breath_t   = 0;
+static uint32_t g_breath_t   = 0;      /* 呼吸动画步进时间戳 */
+static uint32_t g_breath_start = 0;    /* 呼吸灯启动时刻，用于 15s 超时关灯 */
 
 /* ===== 统一函数 ===== */
 
@@ -202,7 +203,7 @@ int main(void)
     Bsp_Tick_DelayMs(1500);
     SwitchMode(APP_MODE_VOICE, 1);   /* 点 LED1 + 播"进入语音模式"（兼作开机语） */
 
-    /* PA9 呼吸灯默认关闭，由 cmd=01 启动 / done=01 关闭 */
+    /* PA9 呼吸灯默认关闭，由 wake 唤醒启动 / 15s 超时自动关 */
     Bsp_LedPwm_Set(LEDPWM_1, 0);
     Bsp_LedPwm_Set(LEDPWM_2, 0);
 
@@ -281,15 +282,8 @@ int main(void)
             Bsp_UartAsr_Event_t e;
             if (Bsp_UartAsr_TryRecv(&e)) {
                 if (e.type == ASR_EVT_CMD) {
-                    /* cmd=01：启动呼吸灯（任何模式）*/
-                    if (e.arg == 1) {
-                        g_breathing = 1;
-                        g_breath_val = 0;
-                        g_breath_dir = 1;
-                        g_breath_t = Bsp_Tick_GetMs();
-                    }
                     /* 模式切换命令 50..53：任何模式都响应 */
-                    else if (e.arg >= ASR_CMD_ENTER_POWER && e.arg <= ASR_CMD_ENTER_VOICE) {
+                    if (e.arg >= ASR_CMD_ENTER_POWER && e.arg <= ASR_CMD_ENTER_VOICE) {
                         switch (e.arg) {
                         case ASR_CMD_ENTER_POWER:  SwitchMode(APP_MODE_POWER, 0);  break;
                         case ASR_CMD_ENTER_SENSOR: SwitchMode(APP_MODE_SENSOR, 0); break;
@@ -337,16 +331,16 @@ int main(void)
                     }
                 }
                 else if (e.type == ASR_EVT_WAKE) {
+                    /* 唤醒：启动呼吸灯（15s 后主循环超时自动关）+ 播"收到" */
+                    g_breathing = 1;
+                    g_breath_val = 0;
+                    g_breath_dir = 1;
+                    g_breath_t = Bsp_Tick_GetMs();
+                    g_breath_start = Bsp_Tick_GetMs();
                     Bsp_UartAsr_SendPlay(ASR_VOICE_RECEIVED);
                 }
                 else if (e.type == ASR_EVT_DONE) {
-                    /* done=01：关闭呼吸灯 */
-                    if (e.arg == 1) {
-                        g_breathing = 0;
-                        g_breath_val = 0;
-                        g_breath_dir = 1;
-                        Bsp_LedPwm_Set(LEDPWM_2, 0);
-                    }
+                    /* done=NN：播报完成回执，仅供参考，无需动作 */
                 }
             }
         }
@@ -426,7 +420,13 @@ int main(void)
         /* --- TM1640 眼睛动画（未连接慢闪 / 连接后转动）--- */
         Eye_Update();
 
-        /* --- PA9 呼吸灯：收到 cmd=01 启动，done=01 关闭 --- */
+        /* --- PA9 呼吸灯：wake 唤醒启动，15s 超时自动关 --- */
+        if (g_breathing && (Bsp_Tick_GetMs() - g_breath_start >= 15000)) {
+            g_breathing = 0;
+            g_breath_val = 0;
+            g_breath_dir = 1;
+            Bsp_LedPwm_Set(LEDPWM_2, 0);
+        }
         if (g_breathing && (Bsp_Tick_GetMs() - g_breath_t >= 10)) {
             g_breath_t = Bsp_Tick_GetMs();
             if (g_breath_dir) {
