@@ -2,8 +2,8 @@
 #define __BSP_UART_ASR_H
 #include "py32f0xx_hal.h"
 
-/* 语音芯片交互协议 v0.3（ASCII 文本；MCU 发 `=`，收 `:`；数值全部十进制）
-   详见 resource/语音芯片交互协议.md */
+/* 语音芯片交互协议 v0.6（ASCII 文本；两方向均带帧尾：MCU 发帧尾 `\n`，收帧尾 `\r\n`；
+   tag 用 `=` 分隔十进制数值）。权威文档见 resource/语音芯片交互协议.md */
 
 /* --- 语音 ID（十进制，供 Bsp_UartAsr_SendPlay 使用） --- */
 #define ASR_VOICE_BOOT           1   /* 开机语 */
@@ -55,16 +55,16 @@ typedef struct {
     uint8_t               arg;
 } Bsp_UartAsr_Event_t;
 
-/** 初始化 USART2 (PF0/PF1, 115200 8N1) + DMA 收 + IDLE 中断 */
+/** 初始化 USART2 (PF0/PF1, 9600 8N1) + DMA 收 + IDLE 中断 */
 void Bsp_UartAsr_Init(void);
 
-/** 发送 "play=NN\r\n" 请求播报指定语音 ID（十进制） */
+/** 发送 "play=NN\n" 请求播报指定语音 ID（十进制） */
 void Bsp_UartAsr_SendPlay(uint8_t voice_id);
 
-/** 发送 "stop\r\n" */
+/** 发送 "stop\n" */
 void Bsp_UartAsr_SendStop(void);
 
-/** 发送 "ping\r\n" */
+/** 发送 "ping\n" */
 void Bsp_UartAsr_SendPing(void);
 
 /**
