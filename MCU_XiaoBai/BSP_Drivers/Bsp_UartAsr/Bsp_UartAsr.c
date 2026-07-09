@@ -3,8 +3,8 @@
 #include <string.h>
 
 /*
- * 语音协议 v0.5 实现：ASCII 文本
- *   MCU 发（无帧尾）：<tag>[=<dec>]
+ * 语音协议 v0.6 实现：ASCII 文本
+ *   MCU 发（帧尾 \n）：<tag>[=<dec>]\n
  *   MCU 收（帧尾 \r\n）：<tag>[=<dec>]\r\n
  *
  * 接收路径：DMA 循环 + UART IDLE 中断
@@ -13,7 +13,7 @@
  *   - 收到 '\n' 时判定为一帧结束（若前一字节是 '\r' 顺便剔除），
  *     把 g_line 里累积的字符交给 Line_Dispatch 解析
  *
- * 发送路径：把 "tag[=NN]" 组装成字符串，HAL_UART_Transmit 阻塞发送（无帧尾）。
+ * 发送路径：把 "tag[=NN]" 组装成字符串，HAL_UART_Transmit 阻塞发送，末尾带 \n 帧尾。
  */
 
 #define RX_DMA_BUF_SIZE   64U     /* DMA 循环缓冲 */
@@ -172,7 +172,7 @@ void Bsp_UartAsr_Init(void)
     __HAL_UART_ENABLE_IT(&huart, UART_IT_IDLE);
 }
 
-/* --- 发送（无帧尾） --- */
+/* --- 发送（带 \n 帧尾） --- */
 
 static void SendStr(const char *s, uint16_t len)
 {
