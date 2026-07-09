@@ -331,13 +331,13 @@ int main(void)
                     }
                 }
                 else if (e.type == ASR_EVT_WAKE) {
-                    /* 唤醒：启动呼吸灯（15s 后主循环超时自动关）+ 播"收到" */
+                    /* 唤醒：启动呼吸灯（15s 后主循环超时自动关）。
+                       不再发 play=10，唤醒应答由 ASRPRO 本地回复词"我在"承担，响应更快 */
                     g_breathing = 1;
                     g_breath_val = 0;
                     g_breath_dir = 1;
                     g_breath_t = Bsp_Tick_GetMs();
-                    g_breath_start = Bsp_Tick_GetMs();
-                    Bsp_UartAsr_SendPlay(ASR_VOICE_RECEIVED);
+                    g_breath_start = g_breath_t;
                 }
                 else if (e.type == ASR_EVT_DONE) {
                     /* done=NN：播报完成回执，仅供参考，无需动作 */
