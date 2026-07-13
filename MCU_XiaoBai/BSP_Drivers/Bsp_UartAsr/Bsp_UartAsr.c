@@ -172,7 +172,9 @@ void Bsp_UartAsr_Init(void)
     __HAL_UART_ENABLE_IT(&huart, UART_IT_IDLE);
 }
 
-/* --- 发送（带 \n 帧尾） --- */
+/* --- 发送（无帧尾）---
+   天问/ASRPRO 侧用 serial_readstr 读取后与纯文本精确比较（Rec == "play=NN"），
+   不接受任何帧尾。若发送方带 \n，天问比较会失配导致完全不播报。故 MCU→ASR 一律不发帧尾。 */
 
 static void SendStr(const char *s, uint16_t len)
 {
@@ -181,20 +183,17 @@ static void SendStr(const char *s, uint16_t len)
 
 void Bsp_UartAsr_SendPlay(uint8_t voice_id)
 {
-    /* "play=NN\n"（voice_id 1..99，2 位十进制补零，帧尾 \n）*/
+    /* "play=NN"（voice_id 1..99，2 位十进制补零，无帧尾）*/
     if (voice_id > 99U) voice_id = 99U;
-    char buf[8];
+    char buf[7];
     buf[0] = 'p'; buf[1] = 'l'; buf[2] = 'a'; buf[3] = 'y'; buf[4] = '=';
     buf[5] = (char)('0' + (voice_id / 10U));
     buf[6] = (char)('0' + (voice_id % 10U));
-    buf[7] = '\n';
-    SendStr(buf, 8);
-    /* v0.6：删除原 DelayMs(500)。语音侧已按行确定性分帧，不再需要人为静默间隔；
-       播报与动作天然异步，主循环不再冻结。 */
+    SendStr(buf, 7);
 }
 
-void Bsp_UartAsr_SendStop(void) { SendStr("stop\n", 5); }
-void Bsp_UartAsr_SendPing(void) { SendStr("ping\n", 5); }
+void Bsp_UartAsr_SendStop(void) { SendStr("stop", 4); }
+void Bsp_UartAsr_SendPing(void) { SendStr("ping", 4); }
 
 void Bsp_UartAsr_SendRaw(const uint8_t *data, uint16_t len)
 {
