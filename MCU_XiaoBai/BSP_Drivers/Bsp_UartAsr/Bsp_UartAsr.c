@@ -3,7 +3,7 @@
 #include <string.h>
 
 /*
- * 语音协议 v0.6 实现：ASCII 文本
+ * 语音协议 v0.7 实现：ASCII 文本
  *   MCU 发（帧尾 \n）：<tag>[=<dec>]\n
  *   MCU 收（帧尾 \r\n）：<tag>[=<dec>]\r\n
  *
@@ -12,12 +12,14 @@
  *   - 逐字节喂进字符状态机 Frame_FeedByte
  *   - 收到 '\n' 时判定为一帧结束（若前一字节是 '\r' 顺便剔除），
  *     把 g_line 里累积的字符交给 Line_Dispatch 解析
+ *   - 接收方向兼容有无 \r（ASRPRO 可能只发 \n）；状态机只看 \n 做帧结束
  *
- * 发送路径：把 "tag[=NN]" 组装成字符串，HAL_UART_Transmit 阻塞发送，末尾带 \n 帧尾。
+ * 发送路径：把 "tag[=NN]" 组装成字符串，HAL_UART_Transmit 阻塞发送，
+ * 末尾带 \n 帧尾（v0.7 §一：MCU→ASR 帧尾 = LF 单字节）。
  */
 
 #define RX_DMA_BUF_SIZE   64U     /* DMA 循环缓冲 */
-#define LINE_BUF_SIZE     32U     /* 单帧最大长度（协议约定，不含 \r\n） */
+#define LINE_BUF_SIZE     40U     /* 单帧最大长度（协议约定 32 字节，留 8 字节余量） */
 #define EVT_Q_SIZE        4U
 
 static UART_HandleTypeDef huart;
@@ -172,31 +174,36 @@ void Bsp_UartAsr_Init(void)
     __HAL_UART_ENABLE_IT(&huart, UART_IT_IDLE);
 }
 
-/* --- 发送（无帧尾）---
-   天问/ASRPRO 侧用 serial_readstr 读取后与纯文本精确比较（Rec == "play=NN"），
-   不接受任何帧尾。若发送方带 \n，天问比较会失配导致完全不播报。故 MCU→ASR 一律不发帧尾。 */
+/* --- 发送 ---
+   v0.7 §一：MCU→ASR 帧尾固定为 \n（LF 0x0A 单字节）。所有 SendXxx 通过 SendFrame 统一追加。 */
 
-static void SendStr(const char *s, uint16_t len)
+#define ASR_TX_TAIL_CHAR    '\n'    /* v0.7 §一帧尾 */
+
+static void SendFrame(const char *body, uint16_t body_len)
 {
-    HAL_UART_Transmit(&huart, (uint8_t *)s, len, 1000);
+    /* frame 缓冲：v0.7 最长 "play=255\n" = 9 字节，取 16 留余量 */
+    uint8_t frame[16];
+    if (body_len + 1 > sizeof(frame)) return;
+    for (uint16_t i = 0; i < body_len; i++) frame[i] = (uint8_t)body[i];
+    frame[body_len] = ASR_TX_TAIL_CHAR;
+    HAL_UART_Transmit(&huart, frame, (uint16_t)(body_len + 1), 1000);
 }
 
 void Bsp_UartAsr_SendPlay(uint8_t voice_id)
 {
-    /* "play=NN"（voice_id 1..99，2 位十进制补零，无帧尾）*/
-    if (voice_id > 99U) voice_id = 99U;
-    char buf[7];
-    buf[0] = 'p'; buf[1] = 'l'; buf[2] = 'a'; buf[3] = 'y'; buf[4] = '=';
-    buf[5] = (char)('0' + (voice_id / 10U));
-    buf[6] = (char)('0' + (voice_id % 10U));
-    SendStr(buf, 7);
+    /* v0.7 §一：1-3 位十进制不补零。snprintf 自动格式化；截断保护 */
+    char buf[9];   /* "play="(5) + "255"(3) + '\0'(1) = 9 */
+    int n = snprintf(buf, sizeof(buf), "play=%u", (unsigned)voice_id);
+    if (n <= 0 || n >= (int)sizeof(buf)) return;
+    SendFrame(buf, (uint16_t)n);
 }
 
-void Bsp_UartAsr_SendStop(void) { SendStr("stop", 4); }
-void Bsp_UartAsr_SendPing(void) { SendStr("ping", 4); }
+void Bsp_UartAsr_SendStop(void) { SendFrame("stop", 4); }
+void Bsp_UartAsr_SendPing(void) { SendFrame("ping", 4); }
 
 void Bsp_UartAsr_SendRaw(const uint8_t *data, uint16_t len)
 {
+    /* 调试透传：绕过协议格式化，原样发；不追加 \n */
     HAL_UART_Transmit(&huart, (uint8_t *)data, len, 50);
 }
 
