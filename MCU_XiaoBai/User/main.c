@@ -137,8 +137,10 @@ static void PerformShutdown(void)
 }
 
 /* 切模式：停电机 + 点 LED + 可选播报。
- * play_voice=1（按键/开机）：播报后等播报完毕再返回，保证语音与动作同步。
- * play_voice=0（语音命令 cmd=50..53）：静默，避免用户刚说完又播报一遍。 */
+ * play_voice=1（按键 / 语音命令 cmd=2..5 / 模式内子动作）：播"进入 XX 模式"，
+ *             与"MCU 实际动作 → SendPlay"统一规则一致。
+ * play_voice=0（开机默认进入语音模式）：静默，开机语已由 Bsp_UartAsr_SendPlay(ASR_VOICE_BOOT) 单独发，
+ *             避免与 BOOT 合并句重复。 */
 static void SwitchMode(App_Mode_t new_mode, uint8_t play_voice)
 {
     if (new_mode >= APP_MODE_COUNT) return;
