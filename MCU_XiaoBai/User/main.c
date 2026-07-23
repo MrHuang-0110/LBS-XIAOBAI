@@ -106,6 +106,20 @@ static uint32_t g_breath_start = 0;    /* 呼吸灯启动时刻，用于 15s 超
 
 /* ===== 统一函数 ===== */
 
+/* 完整关机流程：停电机 → 播关机语 → 关机动画 → 关 LED/TM1640 → 延时 1s → 断电。
+   KEY1 长按和语音命令 cmd=1 共用。 */
+static void PerformShutdown(void)
+{
+    Bsp_Motor_StopAll();
+    Bsp_UartAsr_SendPlay(ASR_VOICE_SHUTDOWN);
+    Bsp_Power_ShutdownAnimation();
+    Bsp_LedPwm_Set(LEDPWM_1, 0);
+    Bsp_LedPwm_Set(LEDPWM_2, 0);
+    Bsp_Tm1640_Clear();
+    Bsp_Tick_DelayMs(1000);
+    Bsp_Power_ShutDown();
+}
+
 /* 切模式：停电机 + 点 LED + 可选播报。
  * play_voice=1（按键/开机）：播报后等播报完毕再返回，保证语音与动作同步。
  * play_voice=0（语音命令 cmd=50..53）：静默，避免用户刚说完又播报一遍。 */
@@ -201,7 +215,10 @@ int main(void)
 
     /* 应用层时序：等 ASRPRO 启动 + 默认进入语音模式 */
     Bsp_Tick_DelayMs(1500);
-    SwitchMode(APP_MODE_VOICE, 1);   /* 点 LED1 + 播"进入语音模式"（兼作开机语） */
+    /* v0.7 ID 17 = "你好呀我是小白进入语音模式"，本身就是合并句，
+       单独播；SwitchMode 用 play_voice=0 静默切避免重复 */
+    Bsp_UartAsr_SendPlay(ASR_VOICE_BOOT);
+    SwitchMode(APP_MODE_VOICE, 0);
 
     /* PA9 呼吸灯默认关闭，由 wake 唤醒启动 / 15s 超时自动关 */
     Bsp_LedPwm_Set(LEDPWM_1, 0);
@@ -266,14 +283,7 @@ int main(void)
             }
             else if (ke == KEY_EVT_LONG && kid == KEY_ID_1) {
                 /* === 关机流程 === */
-                Bsp_Motor_StopAll();
-                Bsp_UartAsr_SendPlay(ASR_VOICE_SHUTDOWN);
-                Bsp_Power_ShutdownAnimation();   /* 关机动画：4灯逐个灭，2s */
-                Bsp_LedPwm_Set(LEDPWM_1, 0);
-                Bsp_LedPwm_Set(LEDPWM_2, 0);
-                Bsp_Tm1640_Clear();
-                Bsp_Tick_DelayMs(1000);          /* 断电前延时 1 秒 */
-                Bsp_Power_ShutDown();
+                PerformShutdown();
             }
         }
 
