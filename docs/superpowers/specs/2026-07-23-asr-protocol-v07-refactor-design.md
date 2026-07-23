@@ -238,10 +238,15 @@ static void PerformShutdown(void)
 }
 ```
 
-### 6.3 语音切模式：静默 → 回播（line 286-292）
+### 6.3 语音 CMD 分派链（line 286-330 整体结构）
+
+现有代码是 `if 切模式 else if 语音模式动作` 两段链。改后是**三段单一 else-if 链**，顺序不可颠倒——`cmd=1` 关机必须**先于** `g_mode == APP_MODE_VOICE` 判定，否则非语音模式下的"关机"会被吃掉：
 
 ```c
-if (e.arg >= ASR_CMD_ENTER_POWER && e.arg <= ASR_CMD_ENTER_VOICE) {
+if (e.arg == ASR_CMD_SHUTDOWN) {                                    /* 段1: 任何模式响应 */
+    PerformShutdown();
+}
+else if (e.arg >= ASR_CMD_ENTER_POWER && e.arg <= ASR_CMD_ENTER_VOICE) {   /* 段2: 任何模式响应 */
     switch (e.arg) {
     case ASR_CMD_ENTER_POWER:  SwitchMode(APP_MODE_POWER, 1);  break;   /* 0→1 */
     case ASR_CMD_ENTER_SENSOR: SwitchMode(APP_MODE_SENSOR, 1); break;
@@ -249,12 +254,12 @@ if (e.arg >= ASR_CMD_ENTER_POWER && e.arg <= ASR_CMD_ENTER_VOICE) {
     case ASR_CMD_ENTER_VOICE:  SwitchMode(APP_MODE_VOICE, 1);  break;
     }
 }
-else if (e.arg == ASR_CMD_SHUTDOWN) {   /* 新增：任何模式响应 */
-    PerformShutdown();
+else if (g_mode == APP_MODE_VOICE) {                                /* 段3: 仅语音模式响应 */
+    /* 见 §6.4 */
 }
 ```
 
-### 6.4 语音方向/单电机命令回播（line 295-330）
+### 6.4 语音方向/单电机命令回播（§6.3 段3 内部）
 
 **移除**防抖包裹（`is_action` / `now` / `last_cmd_time` 全删；line 221-223 的 `uint32_t last_cmd_time` 也删）。
 
@@ -278,7 +283,7 @@ static const uint8_t cmd_to_voice[11] = {
 };
 ```
 
-**动作命令分支改成**（去防抖 + 加回播）：
+**动作命令分支的最终形态**（去防抖 + 加回播）：
 
 ```c
 else if (g_mode == APP_MODE_VOICE) {
