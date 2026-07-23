@@ -2,46 +2,54 @@
 #define __BSP_UART_ASR_H
 #include "py32f0xx_hal.h"
 
-/* 语音芯片交互协议 v0.6（ASCII 文本；两方向均带帧尾：MCU 发帧尾 `\n`，收帧尾 `\r\n`；
-   tag 用 `=` 分隔十进制数值）。权威文档见 resource/语音芯片交互协议.md */
+/* 语音芯片交互协议 v0.7（ASCII 文本；两方向均带帧尾：MCU 发帧尾 `\n`，收帧尾 `\r\n`；
+   tag 用 `=` 分隔十进制数值；命令 ID ∈ [1,16] 播报 ID ∈ [17,41] 不重叠）。
+   权威文档见 resource/语音芯片交互协议.md 与 resource/MCU协议注意事项.md */
 
-/* --- 语音 ID（十进制，供 Bsp_UartAsr_SendPlay 使用） --- */
-#define ASR_VOICE_BOOT           1   /* 开机语 */
-#define ASR_VOICE_SHUTDOWN       2   /* 关机语 */
-#define ASR_VOICE_ENTER_POWER    3   /* 进入动力 */
-#define ASR_VOICE_ENTER_SENSOR   4   /* 进入感应 */
-#define ASR_VOICE_ENTER_REMOTE   5   /* 进入遥控 */
-#define ASR_VOICE_ENTER_VOICE    6   /* 进入语音 */
-#define ASR_VOICE_BLE_CONNECTED  7   /* 遥控连接 */
-#define ASR_VOICE_BLE_LOST       8   /* 遥控断开 */
-#define ASR_VOICE_LOW_BATTERY    9   /* 低电量 */
-#define ASR_VOICE_RECEIVED       10  /* 收到 */
-#define ASR_VOICE_FORWARD        11  /* 前进 */
-#define ASR_VOICE_BACKWARD       12  /* 后退 */
-#define ASR_VOICE_LEFT           13  /* 左转 */
-#define ASR_VOICE_RIGHT          14  /* 右转 */
-#define ASR_VOICE_STOP           15  /* 停止 */
-#define ASR_VOICE_APPROACH_GO    20  /* 靠近启动 */
-#define ASR_VOICE_OBSTACLE_STOP  21  /* 遇障停止 */
-#define ASR_VOICE_WAVE_TOGGLE    22  /* 挥手开关 */
-#define ASR_VOICE_BRIGHTNESS     23  /* 明暗调速 */
+/* --- 语音 ID（十进制，供 Bsp_UartAsr_SendPlay 使用；v0.7 §三 17-41 连续） --- */
+#define ASR_VOICE_BOOT           17  /* 你好呀我是小白进入语音模式（开机语） */
+#define ASR_VOICE_SHUTDOWN       18  /* 再见啦，小白去休息了（关机语） */
+#define ASR_VOICE_ENTER_POWER    19  /* 进入动力模式 */
+#define ASR_VOICE_ENTER_SENSOR   20  /* 进入感应模式 */
+#define ASR_VOICE_ENTER_REMOTE   21  /* 进入遥控模式 */
+#define ASR_VOICE_ENTER_VOICE    22  /* 进入语音模式 */
+#define ASR_VOICE_BLE_CONNECTED  23  /* 遥控已连接 */
+#define ASR_VOICE_BLE_LOST       24  /* 遥控已断开 */
+#define ASR_VOICE_LOW_BATTERY    25  /* 低电量 */
+#define ASR_VOICE_RECEIVED       26  /* 收到 */
+#define ASR_VOICE_FORWARD        27  /* 前进 */
+#define ASR_VOICE_BACKWARD       28  /* 后退 */
+#define ASR_VOICE_LEFT           29  /* 左转 */
+#define ASR_VOICE_RIGHT          30  /* 右转 */
+#define ASR_VOICE_STOP           31  /* 停止 */
+#define ASR_VOICE_APPROACH_GO    32  /* 靠近启动 */
+#define ASR_VOICE_OBSTACLE_STOP  33  /* 遇障停止 */
+#define ASR_VOICE_WAVE_TOGGLE    34  /* 挥手开关 */
+#define ASR_VOICE_BRIGHTNESS     35  /* 明暗调速 */
+#define ASR_VOICE_L_FWD          36  /* 左电机正转 */
+#define ASR_VOICE_L_REV          37  /* 左电机反转 */
+#define ASR_VOICE_L_STOP         38  /* 左电机停止 */
+#define ASR_VOICE_R_FWD          39  /* 右电机正转 */
+#define ASR_VOICE_R_REV          40  /* 右电机反转 */
+#define ASR_VOICE_R_STOP         41  /* 右电机停止 */
 
-/* --- 命令 ID（十进制，Bsp_UartAsr_TryRecv 收到 CMD 事件时 arg = 这些值之一） --- */
-#define ASR_CMD_FORWARD          30
-#define ASR_CMD_BACKWARD         31
-#define ASR_CMD_LEFT             32
-#define ASR_CMD_RIGHT            33
-#define ASR_CMD_STOP             34
-#define ASR_CMD_L_FWD            40
-#define ASR_CMD_L_REV            41
-#define ASR_CMD_L_STOP           42
-#define ASR_CMD_R_FWD            43
-#define ASR_CMD_R_REV            44
-#define ASR_CMD_R_STOP           45
-#define ASR_CMD_ENTER_POWER      50
-#define ASR_CMD_ENTER_SENSOR     51
-#define ASR_CMD_ENTER_REMOTE     52
-#define ASR_CMD_ENTER_VOICE      53
+/* --- 命令 ID（十进制，Bsp_UartAsr_TryRecv 收到 CMD 事件时 arg = 这些值之一；v0.7 §四 1-16 连续） --- */
+#define ASR_CMD_SHUTDOWN         1   /* 关机 */
+#define ASR_CMD_ENTER_POWER      2
+#define ASR_CMD_ENTER_SENSOR     3
+#define ASR_CMD_ENTER_REMOTE     4
+#define ASR_CMD_ENTER_VOICE      5
+#define ASR_CMD_FORWARD          6
+#define ASR_CMD_BACKWARD         7
+#define ASR_CMD_LEFT             8
+#define ASR_CMD_RIGHT            9
+#define ASR_CMD_STOP             10
+#define ASR_CMD_L_FWD            11
+#define ASR_CMD_L_REV            12
+#define ASR_CMD_L_STOP           13
+#define ASR_CMD_R_FWD            14
+#define ASR_CMD_R_REV            15
+#define ASR_CMD_R_STOP           16
 
 typedef enum {
     ASR_EVT_NONE = 0,
