@@ -58,6 +58,22 @@ static const uint8_t sensor_voice[SENSOR_PLAY_COUNT] = {
     ASR_VOICE_APPROACH_GO, ASR_VOICE_OBSTACLE_STOP,
     ASR_VOICE_WAVE_TOGGLE, ASR_VOICE_BRIGHTNESS,
 };
+/* 语音命令 ID (6..16) → 播报 ID (27..31 / 36..41) 映射。
+   索引 = cmd_id - ASR_CMD_FORWARD (6)。宏值由 v0.7 协议 §三/§四 决定；
+   若协议再调 ID，此表须同步核对。 */
+static const uint8_t cmd_to_voice[11] = {
+    ASR_VOICE_FORWARD,   /* cmd=6  → play=27 */
+    ASR_VOICE_BACKWARD,  /* cmd=7  → play=28 */
+    ASR_VOICE_LEFT,      /* cmd=8  → play=29 */
+    ASR_VOICE_RIGHT,     /* cmd=9  → play=30 */
+    ASR_VOICE_STOP,      /* cmd=10 → play=31 */
+    ASR_VOICE_L_FWD,     /* cmd=11 → play=36 */
+    ASR_VOICE_L_REV,     /* cmd=12 → play=37 */
+    ASR_VOICE_L_STOP,    /* cmd=13 → play=38 */
+    ASR_VOICE_R_FWD,     /* cmd=14 → play=39 */
+    ASR_VOICE_R_REV,     /* cmd=15 → play=40 */
+    ASR_VOICE_R_STOP,    /* cmd=16 → play=41 */
+};
 
 /* ===== TM1640 眼睛图案（8×14 点阵，左眼列0-6 / 右眼列7-13，各 7×8）=====
    椭圆形空心轮廓，眨眼=行3一条横线。 */
@@ -235,9 +251,8 @@ int main(void)
     static uint8_t stream[REMOTE_FRAME_LEN * 4];
     uint16_t stream_len = 0;
 
-    /* 语音动作命令防抖时间戳：800ms 内只执行第一个动作命令，
-       防 ASRPRO 误识别连续发 cmd 导致电机正反转交替抖动 */
-    uint32_t last_cmd_time = 0;
+    /* 动作命令防抖已移除：v0.7 下 ASRPRO 侧不误连发，每条 cmd 都执行。
+       依赖 ASRPRO 侧命令冗余抑制；如未来发现误识别，在此处重新加防抖窗。 */
 
     while (1) {
         /* --- 按键扫描（4 键各管一个模式，KEY1 长按关机） --- */
@@ -292,51 +307,51 @@ int main(void)
             Bsp_UartAsr_Event_t e;
             if (Bsp_UartAsr_TryRecv(&e)) {
                 if (e.type == ASR_EVT_CMD) {
-                    /* 模式切换命令 50..53：任何模式都响应 */
-                    if (e.arg >= ASR_CMD_ENTER_POWER && e.arg <= ASR_CMD_ENTER_VOICE) {
+                    /* 段1: 任何模式响应（关机） */
+                    if (e.arg == ASR_CMD_SHUTDOWN) {
+                        PerformShutdown();
+                    }
+                    /* 段2: 任何模式响应（切模式 4 选 1） */
+                    else if (e.arg >= ASR_CMD_ENTER_POWER && e.arg <= ASR_CMD_ENTER_VOICE) {
                         switch (e.arg) {
-                        case ASR_CMD_ENTER_POWER:  SwitchMode(APP_MODE_POWER, 0);  break;
-                        case ASR_CMD_ENTER_SENSOR: SwitchMode(APP_MODE_SENSOR, 0); break;
-                        case ASR_CMD_ENTER_REMOTE: SwitchMode(APP_MODE_REMOTE, 0); break;
-                        case ASR_CMD_ENTER_VOICE:  SwitchMode(APP_MODE_VOICE, 0);  break;
+                        case ASR_CMD_ENTER_POWER:  SwitchMode(APP_MODE_POWER, 1);  break;
+                        case ASR_CMD_ENTER_SENSOR: SwitchMode(APP_MODE_SENSOR, 1); break;
+                        case ASR_CMD_ENTER_REMOTE: SwitchMode(APP_MODE_REMOTE, 1); break;
+                        case ASR_CMD_ENTER_VOICE:  SwitchMode(APP_MODE_VOICE, 1);  break;
                         }
                     }
-                    /* 电机控制命令 30..45：只在语音模式执行 */
-                    else if (g_mode == APP_MODE_VOICE) {
-                        uint8_t is_action = (e.arg >= ASR_CMD_FORWARD && e.arg <= ASR_CMD_R_STOP);
-                        uint32_t now = Bsp_Tick_GetMs();
-                        if (is_action && (now - last_cmd_time < 800)) {
-                            /* 防抖忽略 */
-                        } else {
-                            if (is_action) last_cmd_time = now;
-                            switch (e.arg) {
-                            case ASR_CMD_FORWARD:
-                                Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
-                                Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
-                                break;
-                            case ASR_CMD_BACKWARD:
-                                Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
-                                Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
-                                break;
-                            case ASR_CMD_LEFT:
-                                Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
-                                Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
-                                break;
-                            case ASR_CMD_RIGHT:
-                                Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
-                                Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
-                                break;
-                            case ASR_CMD_STOP:
-                                Bsp_Motor_StopAll();
-                                break;
-                            case ASR_CMD_L_FWD:  Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH); break;
-                            case ASR_CMD_L_REV:  Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH); break;
-                            case ASR_CMD_L_STOP: Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH); break;
-                            case ASR_CMD_R_FWD:  Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH); break;
-                            case ASR_CMD_R_REV:  Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH); break;
-                            case ASR_CMD_R_STOP: Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH); break;
-                            default: break;
-                            }
+                    /* 段3: 仅语音模式响应（动作命令 11 条） */
+                    else if (g_mode == APP_MODE_VOICE &&
+                             e.arg >= ASR_CMD_FORWARD && e.arg <= ASR_CMD_R_STOP) {
+                        /* 统一回播规则：MCU 实际动作 → 对应播报语 */
+                        Bsp_UartAsr_SendPlay(cmd_to_voice[e.arg - ASR_CMD_FORWARD]);
+                        switch (e.arg) {
+                        case ASR_CMD_FORWARD:
+                            Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                            Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                            break;
+                        case ASR_CMD_BACKWARD:
+                            Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                            Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                            break;
+                        case ASR_CMD_LEFT:
+                            Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                            Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                            break;
+                        case ASR_CMD_RIGHT:
+                            Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                            Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                            break;
+                        case ASR_CMD_STOP:
+                            Bsp_Motor_StopAll();
+                            break;
+                        case ASR_CMD_L_FWD:  Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH); break;
+                        case ASR_CMD_L_REV:  Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH); break;
+                        case ASR_CMD_L_STOP: Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH); break;
+                        case ASR_CMD_R_FWD:  Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH); break;
+                        case ASR_CMD_R_REV:  Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH); break;
+                        case ASR_CMD_R_STOP: Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH); break;
+                        default: break;
                         }
                     }
                 }
