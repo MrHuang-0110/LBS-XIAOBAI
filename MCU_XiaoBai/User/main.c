@@ -123,7 +123,7 @@ static uint32_t g_breath_start = 0;    /* 呼吸灯启动时刻，用于 15s 超
 /* ===== 统一函数 ===== */
 
 /* 低电量播报（带 30s 冷却，避免刷屏）。
-   两处调用：主循环周期检测 + App_TryStartMotor 拒启动时。 */
+   主循环周期检测：Bsp_Battery_IsLow() 为真时调这里，30s 播一次。 */
 static void App_ReportLowBattery(void)
 {
     static uint32_t last_report = 0;
@@ -134,26 +134,6 @@ static void App_ReportLowBattery(void)
         last_report = now;
         reported = 1;
     }
-}
-
-/* 电机启动 gate：电池电压不足以承担电机瞬态压降时拒启动 + 播低电量 + 停车。
-   MOTOR_DIR_STOP 无条件放行（哪怕电池空了也要能停车）。
-   返回 1 = 成功启动 / 0 = 被拒。 */
-static uint8_t App_TryStartMotor(Bsp_Motor_Id_t id,
-                                 Bsp_Motor_Dir_t dir,
-                                 Bsp_Motor_Speed_t speed)
-{
-    if (dir == MOTOR_DIR_STOP) {
-        Bsp_Motor_Set(id, dir, speed);
-        return 1;
-    }
-    if (!Bsp_Battery_CanDriveMotor()) {
-        App_ReportLowBattery();
-        Bsp_Motor_StopAll();
-        return 0;
-    }
-    Bsp_Motor_Set(id, dir, speed);
-    return 1;
 }
 
 /* 完整关机流程：停电机 → 播关机语 → 关机动画 → 关 LED/TM1640 → 延时 1s → 断电。
@@ -363,30 +343,30 @@ int main(void)
                         Bsp_UartAsr_SendPlay(cmd_to_voice[e.arg - ASR_CMD_FORWARD]);
                         switch (e.arg) {
                         case ASR_CMD_FORWARD:
-                            App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
-                            App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                            Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                            Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
                             break;
                         case ASR_CMD_BACKWARD:
-                            App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
-                            App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                            Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                            Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
                             break;
                         case ASR_CMD_LEFT:
-                            App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
-                            App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                            Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                            Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
                             break;
                         case ASR_CMD_RIGHT:
-                            App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
-                            App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                            Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                            Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
                             break;
                         case ASR_CMD_STOP:
                             Bsp_Motor_StopAll();
                             break;
-                        case ASR_CMD_L_FWD:  App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH); break;
-                        case ASR_CMD_L_REV:  App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH); break;
-                        case ASR_CMD_L_STOP: App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH); break;
-                        case ASR_CMD_R_FWD:  App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH); break;
-                        case ASR_CMD_R_REV:  App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH); break;
-                        case ASR_CMD_R_STOP: App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH); break;
+                        case ASR_CMD_L_FWD:  Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH); break;
+                        case ASR_CMD_L_REV:  Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH); break;
+                        case ASR_CMD_L_STOP: Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH); break;
+                        case ASR_CMD_R_FWD:  Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH); break;
+                        case ASR_CMD_R_REV:  Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH); break;
+                        case ASR_CMD_R_STOP: Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH); break;
                         default: break;
                         }
                     }
@@ -447,25 +427,25 @@ int main(void)
                     g_l1_was = keys[REMOTE_KEY_L1];
                     /* 方向键优先（坦克转向），否则单电机键 */
                     if (keys[REMOTE_KEY_UP]) {
-                        App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  g_remote_speed);
-                        App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  g_remote_speed);
+                        Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  g_remote_speed);
+                        Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  g_remote_speed);
                     } else if (keys[REMOTE_KEY_DOWN]) {
-                        App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, g_remote_speed);
-                        App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, g_remote_speed);
+                        Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, g_remote_speed);
+                        Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, g_remote_speed);
                     } else if (keys[REMOTE_KEY_LEFT]) {
-                        App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, g_remote_speed);
-                        App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  g_remote_speed);
+                        Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, g_remote_speed);
+                        Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  g_remote_speed);
                     } else if (keys[REMOTE_KEY_RIGHT]) {
-                        App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  g_remote_speed);
-                        App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, g_remote_speed);
+                        Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  g_remote_speed);
+                        Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, g_remote_speed);
                     } else {
                         /* 单电机：Y=L正转 A=L反转 X=R正转 B=R反转 */
-                        if (keys[REMOTE_KEY_Y])      App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  g_remote_speed);
-                        else if (keys[REMOTE_KEY_A]) App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, g_remote_speed);
-                        else                         App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_STOP,     g_remote_speed);
-                        if (keys[REMOTE_KEY_X])      App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  g_remote_speed);
-                        else if (keys[REMOTE_KEY_B]) App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, g_remote_speed);
-                        else                         App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_STOP,     g_remote_speed);
+                        if (keys[REMOTE_KEY_Y])      Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  g_remote_speed);
+                        else if (keys[REMOTE_KEY_A]) Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, g_remote_speed);
+                        else                         Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_STOP,     g_remote_speed);
+                        if (keys[REMOTE_KEY_X])      Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  g_remote_speed);
+                        else if (keys[REMOTE_KEY_B]) Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, g_remote_speed);
+                        else                         Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_STOP,     g_remote_speed);
                     }
                     g_last_remote_frame = Bsp_Tick_GetMs();
                 }
@@ -504,24 +484,24 @@ int main(void)
         if (g_mode == APP_MODE_POWER && !g_mode_paused) {
             switch (g_power_action) {
             case POWER_ACT_STOP:
-                App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH);
-                App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH);
+                Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH);
+                Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_STOP,     MOTOR_SPEED_HIGH);
                 break;
             case POWER_ACT_FWD:
-                App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
-                App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
                 break;
             case POWER_ACT_BACK:
-                App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
-                App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
                 break;
             case POWER_ACT_LEFT:
-                App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
-                App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
                 break;
             case POWER_ACT_RIGHT:
-                App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
-                App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
+                Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD,  MOTOR_SPEED_HIGH);
+                Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_BACKWARD, MOTOR_SPEED_HIGH);
                 break;
             }
         }
@@ -539,8 +519,8 @@ int main(void)
             case SENSOR_PLAY_APPROACH:
                 /* 靠近启动：有物体前进，无物体停 */
                 if (ir2_trig) {
-                    App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
-                    App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
+                    Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
+                    Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
                 } else {
                     Bsp_Motor_StopAll();
                 }
@@ -550,8 +530,8 @@ int main(void)
                 if (ir2_trig) {
                     Bsp_Motor_StopAll();
                 } else {
-                    App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
-                    App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
+                    Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
+                    Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
                 }
                 break;
             case SENSOR_PLAY_WAVE:
@@ -567,8 +547,8 @@ int main(void)
                     }
                 }
                 if (g_wave_on) {
-                    App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
-                    App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
+                    Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
+                    Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
                 } else {
                     Bsp_Motor_StopAll();
                 }
@@ -576,14 +556,14 @@ int main(void)
             case SENSOR_PLAY_BRIGHTNESS:
                 /* 明暗调速：反射越强（值越小）速度越快 */
                 if (ir2 < 500) {
-                    App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_FORWARD, MOTOR_SPEED_HIGH);
-                    App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_FORWARD, MOTOR_SPEED_HIGH);
+                    Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD, MOTOR_SPEED_HIGH);
+                    Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD, MOTOR_SPEED_HIGH);
                 } else if (ir2 < 1000) {
-                    App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
-                    App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
+                    Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
+                    Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD, MOTOR_SPEED_MID);
                 } else if (ir2 < IR_THRESHOLD) {
-                    App_TryStartMotor(MOTOR_LEFT,  MOTOR_DIR_FORWARD, MOTOR_SPEED_LOW);
-                    App_TryStartMotor(MOTOR_RIGHT, MOTOR_DIR_FORWARD, MOTOR_SPEED_LOW);
+                    Bsp_Motor_Set(MOTOR_LEFT,  MOTOR_DIR_FORWARD, MOTOR_SPEED_LOW);
+                    Bsp_Motor_Set(MOTOR_RIGHT, MOTOR_DIR_FORWARD, MOTOR_SPEED_LOW);
                 } else {
                     Bsp_Motor_StopAll();
                 }

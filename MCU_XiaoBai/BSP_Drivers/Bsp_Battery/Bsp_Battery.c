@@ -18,8 +18,7 @@ static uint16_t g_samples[FILTER_N];
 static uint8_t  g_head = 0;
 
 /* 迟滞状态（模块内保持，跨阈值才翻转） */
-static uint8_t g_is_low     = 0;   /* 1 = 当前处于低电量态 */
-static uint8_t g_motor_ok   = 1;   /* 1 = 允许驱动电机 */
+static uint8_t g_is_low = 0;    /* 1 = 当前处于低电量态 */
 
 static uint16_t Adc_To_Mv(uint16_t adc)
 {
@@ -51,10 +50,8 @@ void Bsp_Battery_Init(void)
     }
     g_head = 0;
 
-    /* 依据初始中值决定 is_low / motor_ok 初值 */
-    uint16_t v0 = Bsp_Battery_GetVoltage();
-    g_is_low   = (v0 < LOW_BATTERY_ENTER_MV) ? 1 : 0;
-    g_motor_ok = (v0 >= MOTOR_MIN_MV) ? 1 : 0;
+    /* 依据初始中值决定 is_low 初值 */
+    g_is_low = (Bsp_Battery_GetVoltage() < LOW_BATTERY_ENTER_MV) ? 1 : 0;
 }
 
 void Bsp_Battery_Poll(void)
@@ -83,16 +80,4 @@ uint8_t Bsp_Battery_IsLow(void)
         if (v < LOW_BATTERY_ENTER_MV) g_is_low = 1;
     }
     return g_is_low;
-}
-
-uint8_t Bsp_Battery_CanDriveMotor(void)
-{
-    uint16_t v = Bsp_Battery_GetVoltage();
-    /* 迟滞：允许态下跌破 MOTOR_MIN_MV 才禁止；禁止态下爬回 MOTOR_RESUME_MV 才允许 */
-    if (g_motor_ok) {
-        if (v < MOTOR_MIN_MV) g_motor_ok = 0;
-    } else {
-        if (v > MOTOR_RESUME_MV) g_motor_ok = 1;
-    }
-    return g_motor_ok;
 }
