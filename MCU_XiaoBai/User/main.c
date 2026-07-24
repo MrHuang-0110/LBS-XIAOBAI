@@ -122,14 +122,14 @@ static uint32_t g_breath_start = 0;    /* 呼吸灯启动时刻，用于 15s 超
 
 /* ===== 统一函数 ===== */
 
-/* 低电量播报（带 30s 冷却，避免刷屏）。
-   主循环周期检测：Bsp_Battery_IsLow() 为真时调这里，30s 播一次。 */
+/* 低电量播报（带 5s 冷却，避免刷屏）。
+   主循环周期检测：Bsp_Battery_IsLow() 为真时调这里，5s 播一次。 */
 static void App_ReportLowBattery(void)
 {
     static uint32_t last_report = 0;
     static uint8_t  reported = 0;
     uint32_t now = Bsp_Tick_GetMs();
-    if (!reported || (now - last_report >= 30000)) {
+    if (!reported || (now - last_report >= 5000)) {
         Bsp_UartAsr_SendPlay(ASR_VOICE_LOW_BATTERY);
         last_report = now;
         reported = 1;
@@ -592,7 +592,7 @@ int main(void)
         }
 
         /* --- 低电量周期播报：滤波+迟滞后仍处于低电量态，由 App_ReportLowBattery 的
-               30s 冷却控制播报频率；电压恢复到非低电量态后，reported 保持 1，等 30s
+               5s 冷却控制播报频率；电压恢复到非低电量态后，reported 保持 1，等 5s
                冷却期过后若再进入低电量能立刻播（可接受，只在真的抖回来才响）。 */
         if (Bsp_Battery_IsLow()) {
             App_ReportLowBattery();

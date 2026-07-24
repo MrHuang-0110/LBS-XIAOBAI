@@ -10,9 +10,12 @@
 #define ADC_MAX         4095U
 #define DIVIDER_RATIO   2U      /* 分压比 2 倍（1:1 分压）*/
 
-/* 中值滤波窗口：15 个样本 @ 10ms 采样 = 150ms 观察窗；
-   奇数长度取中位数，对 PWM 脉冲式尖峰完全免疫（不像均值会被拉偏）。 */
-#define FILTER_N        15U
+/* 中值滤波窗口：31 个样本 @ 10ms 采样 = 310ms 观察窗；
+   奇数长度取中位数，对 PWM 脉冲式尖峰完全免疫（不像均值会被拉偏）。
+   窗口从最初的 15 扩到 31：在低电量阈值 3.0V 附近，电池内阻大，电机启动的
+   瞬态低电压期可持续 100~200ms，占 31 样本窗口 <50% 不足以拉动中位数，
+   继续取静态电压值 —— 避免瞬态误判。 */
+#define FILTER_N        31U
 
 static uint16_t g_samples[FILTER_N];
 static uint8_t  g_head = 0;
@@ -25,8 +28,8 @@ static uint16_t Adc_To_Mv(uint16_t adc)
     return (uint16_t)((uint32_t)adc * VREF_MV * DIVIDER_RATIO / ADC_MAX);
 }
 
-/* 15 样本插入排序取中值。样本量小，O(N^2) 完全够（~50 次比较） */
-static uint16_t Median15(const uint16_t *src)
+/* 31 样本插入排序取中值。样本量小，O(N^2) 完全够（~465 次比较，PY32 上 <1ms） */
+static uint16_t Median(const uint16_t *src)
 {
     uint16_t a[FILTER_N];
     for (uint8_t i = 0; i < FILTER_N; i++) a[i] = src[i];
@@ -36,7 +39,7 @@ static uint16_t Median15(const uint16_t *src)
         while (j >= 0 && a[j] > v) { a[j + 1] = a[j]; j--; }
         a[j + 1] = v;
     }
-    return a[FILTER_N / 2];   /* index 7 = 中位数 */
+    return a[FILTER_N / 2];   /* index 15 = 中位数 */
 }
 
 void Bsp_Battery_Init(void)
@@ -67,7 +70,7 @@ uint16_t Bsp_Battery_ReadRaw(void)
 
 uint16_t Bsp_Battery_GetVoltage(void)
 {
-    return Adc_To_Mv(Median15(g_samples));
+    return Adc_To_Mv(Median(g_samples));
 }
 
 uint8_t Bsp_Battery_IsLow(void)
