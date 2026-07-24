@@ -7,6 +7,7 @@ typedef enum {
     ADC_CH_IR1     = 1,   /* PA1 IN1 */
     ADC_CH_IR2     = 2,   /* PA2 IN2 */
     ADC_CH_IR3     = 3,   /* PA3 IN3 */
+    ADC_CH_VREFINT = 4,   /* 内部 1.2V 基准通道（IN12），用于反算真实 VDDA */
     ADC_CH_COUNT
 } Bsp_Adc_Channel_t;
 

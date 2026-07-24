@@ -2,8 +2,12 @@
 #include "py32f0xx_ll_system.h"   /* LL_SYSCFG_SetDMARemap_CH3 */
 
 /*
- * ADC1 4 通道扫描 + DMA1_Channel3 循环搬运
- *   PA0=CH0(电池)  PA1=CH1(IR1)  PA2=CH2(IR2)  PA3=CH3(IR3)
+ * ADC1 5 通道扫描 + DMA1_Channel3 循环搬运
+ *   PA0=CH0(电池)  PA1=CH1(IR1)  PA2=CH2(IR2)  PA3=CH3(IR3)  内部 CH12(VREFINT)
+ *
+ * VREFINT 通道（1.2V 内部基准）用途：MCU VDDA 直接由电池供电，会随电池
+ * 电压变化。用 VREFINT 反算真实 VDDA，才能正确换算 PA0 上的电池分压。
+ * 计算：VDDA_mV = 1200 × 4095 / ADC_VREFINT
  *
  * DMA 通道分配（全片 3 个 channel）：
  *   Task 8 USART2_RX -> DMA1_Channel1（HAL_SYSCFG_DMA_Req(0x08)）
@@ -59,10 +63,12 @@ void Bsp_Adc_Init(void)
 
     ADC_ChannelConfTypeDef sc = {0};
     sc.Rank    = ADC_RANK_CHANNEL_NUMBER;
-    sc.Channel = ADC_CHANNEL_0; HAL_ADC_ConfigChannel(&hadc, &sc);
-    sc.Channel = ADC_CHANNEL_1; HAL_ADC_ConfigChannel(&hadc, &sc);
-    sc.Channel = ADC_CHANNEL_2; HAL_ADC_ConfigChannel(&hadc, &sc);
-    sc.Channel = ADC_CHANNEL_3; HAL_ADC_ConfigChannel(&hadc, &sc);
+    sc.Channel = ADC_CHANNEL_0;         HAL_ADC_ConfigChannel(&hadc, &sc);
+    sc.Channel = ADC_CHANNEL_1;         HAL_ADC_ConfigChannel(&hadc, &sc);
+    sc.Channel = ADC_CHANNEL_2;         HAL_ADC_ConfigChannel(&hadc, &sc);
+    sc.Channel = ADC_CHANNEL_3;         HAL_ADC_ConfigChannel(&hadc, &sc);
+    /* VREFINT = CH12（内部通道），ConfigChannel 会自动打开 CCR.VREFEN */
+    sc.Channel = ADC_CHANNEL_VREFINT;   HAL_ADC_ConfigChannel(&hadc, &sc);
 
     /* DMA */
     hdma_adc.Instance                 = DMA1_Channel3;
